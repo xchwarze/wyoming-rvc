@@ -85,8 +85,12 @@ def report_torch(settings: Settings) -> dict[str, Any]:
             )
         arch = f"sm_{''.join(map(str, torch.cuda.get_device_capability(0)))}"
         if arch not in torch.cuda.get_arch_list():
-            raise RuntimeError(
-                f"This torch build does not support {facts['gpu']} ({arch}); built for {torch.cuda.get_arch_list()}"
+            # Not fatal: torch may still run it through PTX JIT; the kernel launch below decides.
+            _LOGGER.warning(
+                "No native kernels for %s (%s) in this torch build %s; relying on PTX JIT",
+                facts["gpu"],
+                arch,
+                torch.cuda.get_arch_list(),
             )
         torch.zeros(1, device="cuda").sum().item()  # fail now, not on the first request
     return facts
