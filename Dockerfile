@@ -39,9 +39,6 @@ ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     MODELS_DIR=/models \
-    HF_HOME=/models/huggingface \
-    CUDA_CACHE_PATH=/models/cuda-cache \
-    CUDA_CACHE_MAXSIZE=4294967296 \
     NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility
 

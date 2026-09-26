@@ -287,7 +287,10 @@ def run() -> None:
     setup_logging(settings.log_level, settings.log_format)
     _LOGGER.info("Loading configuration... wyoming-rvc %s", __version__)
     _LOGGER.info("Settings: %s", settings.summary(), extra={"fields": {"settings": settings.summary()}})
+    # Caches follow MODELS_DIR; set before torch/onnxruntime/huggingface_hub are imported.
     os.environ.setdefault("HF_HOME", str(settings.hf_home))
+    os.environ.setdefault("CUDA_CACHE_PATH", str(settings.models_dir / "cuda-cache"))
+    os.environ.setdefault("CUDA_CACHE_MAXSIZE", str(4 << 30))
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     try:
         asyncio.run(Service(settings).run())

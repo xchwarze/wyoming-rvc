@@ -269,7 +269,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `WYOMING_SAMPLES_PER_CHUNK` | `1024` | Samples per `audio-chunk` event |
 | `HTTP_ENABLED` / `HTTP_HOST` / `HTTP_PORT` | `true` / `0.0.0.0` / `8080` | Debug API |
 | `MODELS_DIR` | `/models` | Root for downloads (`piper/`, `rvc/`, `huggingface/`, `cuda-cache/`) |
-| `HF_HOME` / `HF_TOKEN` | `/models/huggingface` / – | Hugging Face cache and optional token |
+| `HF_HOME` / `HF_TOKEN` | `$MODELS_DIR/huggingface` / – | Hugging Face cache and optional token (the CUDA JIT cache goes to `$MODELS_DIR/cuda-cache`) |
 | `WARMUP_TEXT` | `Sistema iniciado.` | Synthesized and discarded at startup (use your voice's language) |
 | `MAX_TEXT_CHARS` | `5000` | HTTP request limit |
 | `LOG_LEVEL` / `LOG_FORMAT` | `INFO` / `text` | `LOG_FORMAT=json` gives structured logs |
