@@ -161,9 +161,31 @@ Playback on a physical speaker still needs a manual check on your installation.
 ```
 
 To use local files instead, mount them and set absolute paths:
-`RVC_MODEL_FILE=/models/my/voice.pth`, `RVC_INDEX_FILE=/models/my/voice.index`. One
-instance serves one voice. For a second voice, run a second container on another port
-and add it to Home Assistant as another Wyoming entry.
+`RVC_MODEL_FILE=/models/my/voice.pth`, `RVC_INDEX_FILE=/models/my/voice.index`.
+
+**Several RVC voices.** Put a `voices.yaml` in `/config` (mount `./config:/config`, see
+[examples/voices.yaml](examples/voices.yaml)). Every enabled voice whose files download
+correctly is listed in Home Assistant, and each assistant picks one:
+
+```yaml
+voices:
+  teto:
+    name: "Kasane Teto"
+    repo_id: "Slichi/KasaneTeto"
+    preload: true
+  miku:
+    name: "Hatsune Miku"
+    repo_id: "someone/miku-rvc"
+    pitch: 4
+```
+
+ContentVec, RMVPE and Piper are loaded once and shared. Voices are downloaded at startup
+but only enter VRAM when first used; `RVC_MAX_LOADED_MODELS` (default 1) keeps that many
+resident and unloads the least recently used one. A switch to a voice that is not
+resident costs one model load (see `scripts/benchmark.py --switch teto,miku`); raise the
+limit if you have the VRAM and switch often. A voice in use is never unloaded. A request
+for an unknown voice fails with an error instead of falling back to another voice.
+Without `voices.yaml`, the `RVC_*` variables define a single voice as before.
 
 **Another Piper voice or language.** The default source voice is `en_US-ljspeech-high`
 (female, US English). Any voice from
@@ -282,6 +304,9 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `RVC_MODE` | `sentence` | `sentence` (lowest time to first audio) or `whole` (lowest total time) |
 | `RVC_CONCURRENCY` | `1` | Simultaneous conversions on the same loaded models. At 1, extra requests wait in a queue; each extra slot adds peak activation memory. |
 | `RVC_ASSETS_REPO_ID` / `RVC_ASSETS_REVISION` | `IAHispano/Applio` / `main` | Source of ContentVec and RMVPE |
+| `VOICES_FILE` | `/config/voices.yaml` | Voice list; if the default path is missing, the `RVC_*` variables define one voice |
+| `DEFAULT_VOICE` | first enabled voice | Voice used when a request names none |
+| `RVC_MAX_LOADED_MODELS` | `1` | RVC voices kept in VRAM (LRU). Each one costs the model plus its index, typically 100–400 MB |
 | `VOICE_NAME` / `VOICE_LANGUAGE` | `teto` / `en` | Voice advertised to Home Assistant (set the language to match `PIPER_VOICE`) |
 | `WYOMING_PROGRAM_NAME` | `Wyoming RVC` | Name shown in Home Assistant |
 | `WYOMING_HOST` / `WYOMING_PORT` | `0.0.0.0` / `10200` | Wyoming server |
@@ -313,16 +338,18 @@ For debugging and benchmarks only; Home Assistant uses Wyoming.
 | `GET` | `/healthz` | Process alive |
 | `GET` | `/readyz` | 200 only once every model is loaded and warmed up; 503 before |
 | `GET` | `/info` | Versions, GPU, source, model metadata, defaults, CUDA memory |
+| `GET` | `/v1/voices` | Configured voices: installed, loaded, default, sample rate, error |
 | `POST` | `/v1/tts` | JSON → `audio/wav`, with timings in `X-TTS-*` headers |
 | `POST` | `/v1/tts/stream` | Same body; chunked WAV (0-frame header, then PCM as produced) |
 | `POST` | `/v1/metrics/reset` | Reset the CUDA peak-memory counters |
 
 ```json
-{"text": "Hi, I am Teto.", "pitch": 0, "index_rate": 0.6, "protect": 0.33,
+{"text": "Hi, I am Teto.", "voice": "teto", "pitch": 0, "index_rate": 0.6, "protect": 0.33,
  "f0_method": "rmvpe", "mode": "sentence", "disable_rvc": false}
 ```
 
-Only `text` is required. Errors are returned as `{"error": "..."}` with status 422
+Only `text` is required; `voice` defaults to `DEFAULT_VOICE`, and the RVC parameters to
+that voice's settings. Errors are returned as `{"error": "..."}` with status 422
 (invalid), 413 (too long), 503 (not ready), or 500 (synthesis failed). Bodies that are
 not valid UTF-8 are decoded as cp1252, because Windows shells re-encode curl arguments.
 Every request logs one line:
@@ -454,7 +481,6 @@ shown above, or `scripts/test_tts.py`.
 
 ## Known limitations
 
-* One voice per instance; run another container for another voice.
 * Only the `rmvpe` pitch extractor and ContentVec-based models; the RefineGAN vocoder is not supported.
 * Upstream sources must send 16-bit PCM (every known Wyoming TTS does).
 * x86-64 Linux image with NVIDIA only; the image is about 7 GB because the PyTorch wheels bundle the CUDA runtime.

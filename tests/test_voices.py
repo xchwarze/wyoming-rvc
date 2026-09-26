@@ -253,3 +253,11 @@ async def test_pipeline_routes_by_voice_with_per_voice_settings():
 def test_yaml_boolean_voice_id_gets_a_clear_error():
     with pytest.raises(ConfigError, match="quote it"):
         parse_voices("voices:\n  off:\n    repo_id: a/b\n", settings())
+
+
+def test_example_voices_file_is_valid():
+    from pathlib import Path
+
+    example = Path(__file__).parent.parent / "examples" / "voices.yaml"
+    voices = {v.id: v for v in parse_voices(example.read_text(encoding="utf-8"), settings())}
+    assert voices["teto"].preload and voices["myvoice"].enabled is False

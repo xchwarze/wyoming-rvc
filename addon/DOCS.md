@@ -37,7 +37,31 @@ voice: Piper synthesizes the text, then a resident RVC model changes its timbre
 | `rvc_protect` | `0.33` | Protects consonants and breaths (0…0.5) |
 | `rvc_mode` | `sentence` | `sentence` (fastest first audio) or `whole` |
 | `voice_name` | `teto` | Voice name shown in Home Assistant |
+| `default_voice` | – | Voice used when Home Assistant names none (with `voices.yaml`) |
+| `rvc_max_loaded_models` | `1` | RVC voices kept in VRAM; the least recently used is unloaded |
 | `log_level` | `INFO` | Log verbosity |
+
+## Several voices
+
+Create `voices.yaml` in this app's config folder (`/addon_configs/<id>_wyoming_rvc/`,
+reachable with the File editor or Samba apps) and restart the app. Each voice in it is
+listed in Home Assistant instead of the `rvc_repo_id` voice; `rvc_pitch`, `rvc_index_rate`,
+`rvc_protect` and `voice_language` become the defaults for values a voice leaves out. Example:
+
+```yaml
+voices:
+  teto:
+    name: "Kasane Teto"
+    repo_id: "Slichi/KasaneTeto"
+    preload: true
+  miku:
+    name: "Hatsune Miku"
+    repo_id: "someone/miku-rvc"
+    pitch: 4
+```
+
+Voices download at startup and load into VRAM on first use. Switching to a voice that is
+not loaded adds one model load to that reply.
 
 Other settings from the README can be passed as environment variables when running
 the Docker image directly.

@@ -8,6 +8,8 @@ arch:
   - amd64
 init: false
 image: ghcr.io/xchwarze/wyoming-rvc
+map:
+  - addon_config:rw
 discovery:
   - wyoming
 ports:
@@ -33,6 +35,8 @@ options:
   rvc_protect: 0.33
   rvc_mode: sentence
   voice_name: teto
+  default_voice: ""
+  rvc_max_loaded_models: 1
   log_level: INFO
 schema:
   device: list(auto|cuda|cpu)
@@ -47,4 +51,6 @@ schema:
   rvc_protect: float(0,0.5)
   rvc_mode: list(sentence|whole)
   voice_name: str
+  default_voice: str?
+  rvc_max_loaded_models: int(1,16)
   log_level: list(DEBUG|INFO|WARNING|ERROR)
