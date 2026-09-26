@@ -235,6 +235,29 @@ async def test_cancelled_load_keeps_the_model():
     assert reg.engines["teto"].unloaded
 
 
+async def test_preload_defaults_to_the_default_voice():
+    reg = Registry()
+    m = manager(reg, ("teto", "miku"))  # nothing marked preload
+    assert await m.preload() == ["teto"]
+
+
+async def test_preload_failure_of_another_voice_drops_it():
+    class Picky(Registry):
+        def load(self, voice, files):
+            if voice.id == "miku":
+                raise RuntimeError("bad index")
+            return super().load(voice, files)
+
+    m = manager(Picky(), ("teto", "miku"), max_loaded=2, preload=("teto", "miku"))
+    assert await m.preload() == ["teto"]
+    assert m.installed_ids() == ["teto"]
+    with pytest.raises(UnknownVoiceError, match="not installed"):
+        m.resolve("miku")
+    failing_default = manager(Picky(), ("miku", "teto"), preload=("miku",))
+    with pytest.raises(RuntimeError, match="bad index"):
+        await failing_default.preload()
+
+
 async def test_preload_and_unload():
     reg = Registry()
     m = manager(reg, ("teto", "miku", "yui"), max_loaded=1, preload=("teto", "miku"))

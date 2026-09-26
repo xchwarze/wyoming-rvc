@@ -6,7 +6,7 @@
 # Keys (all optional except repo_id, unless model_file is an absolute path):
 #   name, language, repo_id, revision, model_file, index_file,
 #   pitch (-24..24), index_rate (0..1), protect (0..0.5), f0_method (rmvpe),
-#   enabled (default true), preload (load at startup, default false)
+#   enabled (default true), preload (load at startup; if no voice sets it, the default voice is)
 # Missing values fall back to the RVC_* / VOICE_LANGUAGE environment variables.
 # Voice ids are lowercase (a-z 0-9 _ -); quote ids like "on" or "no", which YAML reads as booleans.
 

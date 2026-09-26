@@ -7,7 +7,9 @@
   shared; voices load into VRAM on first use (`rvc_max_loaded_models`, default 1).
 - New options `default_voice` and `rvc_max_loaded_models`.
 - Requests for an unknown voice fail instead of silently using the default voice.
-- Without `voices.yaml` nothing changes.
+- Without `voices.yaml`, the single voice works as before.
+- Models are now stored in the app's `/data` folder, so they survive updates (they were
+  re-downloaded after each update). The first start after updating downloads them once more.
 
 ## 0.2.1
 

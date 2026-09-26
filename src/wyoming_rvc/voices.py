@@ -380,8 +380,20 @@ class VoiceManager:
         return True
 
     async def preload(self) -> list[str]:
-        """Load voices marked ``preload`` (config order), up to ``max_loaded``."""
-        wanted = [c.id for c in self.installed_voices() if c.preload][: self.max_loaded]
-        for vid in wanted:
-            await self.load_voice(vid)
-        return wanted
+        """Load voices marked ``preload`` (the default voice if none is), up to ``max_loaded``.
+
+        Another voice that fails to load is dropped from the installed list; the default must load.
+        """
+        wanted = [c.id for c in self.installed_voices() if c.preload] or [self.default_voice]
+        loaded = []
+        for vid in wanted[: self.max_loaded]:
+            try:
+                await self.load_voice(vid)
+            except Exception as err:
+                if vid == self.default_voice:
+                    raise
+                _LOGGER.error("Voice %s failed to load and will not be offered: %s", vid, err)
+                self._states[vid].error = str(err)
+                continue
+            loaded.append(vid)
+        return loaded

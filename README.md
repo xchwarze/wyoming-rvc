@@ -180,12 +180,16 @@ voices:
 ```
 
 ContentVec, RMVPE and Piper are loaded once and shared. Voices are downloaded at startup
-but only enter VRAM when first used; `RVC_MAX_LOADED_MODELS` (default 1) keeps that many
+but only enter VRAM when first used (at startup, the ones marked `preload: true`, or the
+default voice if none is); `RVC_MAX_LOADED_MODELS` (default 1) keeps that many
 resident and unloads the least recently used one. A switch to a voice that is not
 resident costs one model load (see `scripts/benchmark.py --switch teto,miku`); raise the
 limit if you have the VRAM and switch often. A voice in use is never unloaded. A request
 for an unknown voice fails with an error instead of falling back to another voice.
-Without `voices.yaml`, the `RVC_*` variables define a single voice as before.
+Without `voices.yaml`, the `RVC_*` variables define a single voice as before; the one
+difference from 0.2 is that a request naming another voice (for example after changing
+`VOICE_NAME`) now fails instead of using the configured voice, so reselect the voice in
+Home Assistant.
 
 **Another Piper voice or language.** The default source voice is `en_US-ljspeech-high`
 (female, US English). Any voice from
