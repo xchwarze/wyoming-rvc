@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import json
 import logging
 import os
@@ -123,6 +124,15 @@ async def run_in_daemon_thread(fn: Callable[[], Any]) -> Any:
 
     threading.Thread(target=target, name="load-models", daemon=True).start()
     return await future
+
+
+def resolve_device(settings: Settings, cuda_available: Callable[[], bool]) -> Settings:
+    """Turn DEVICE=auto into cuda or cpu (PIPER_DEVICE=auto then follows it)."""
+    if settings.device != "auto":
+        return settings
+    device = "cuda" if cuda_available() else "cpu"
+    _LOGGER.info("DEVICE=auto resolved to %s", device)
+    return dataclasses.replace(settings, device=device)
 
 
 class Service:
@@ -319,6 +329,10 @@ def run() -> None:
     os.environ.setdefault("CUDA_CACHE_MAXSIZE", str(4 << 30))
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     try:
+        if settings.device == "auto":
+            import torch
+
+            settings = resolve_device(settings, torch.cuda.is_available)
         asyncio.run(Service(settings).run())
     except Exception:
         _LOGGER.exception("Fatal error after %.0f ms", now_ms() - started)

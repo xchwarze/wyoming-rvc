@@ -12,7 +12,7 @@ F0_METHODS: tuple[str, ...] = ("rmvpe",)
 RVC_MODES: tuple[str, ...] = ("whole", "sentence")
 SOURCES: tuple[str, ...] = ("piper", "wyoming")
 PIPER_DEVICES: tuple[str, ...] = ("auto", "cuda", "cpu")
-DEVICES: tuple[str, ...] = ("cuda", "cpu")
+DEVICES: tuple[str, ...] = ("cuda", "cpu", "auto")
 
 
 class ConfigError(ValueError):

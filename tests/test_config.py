@@ -87,3 +87,16 @@ def test_port_clash_detected_across_different_hosts():
         Settings.from_env(
             {"HTTP_HOST": "0.0.0.0", "WYOMING_HOST": "127.0.0.1", "HTTP_PORT": "9000", "WYOMING_PORT": "9000"}
         )
+
+
+def test_device_auto_resolution():
+    from wyoming_rvc.main import resolve_device
+
+    auto = Settings.from_env({"DEVICE": "auto"})
+    assert auto.device == "auto"
+    on_gpu = resolve_device(auto, lambda: True)
+    on_cpu = resolve_device(auto, lambda: False)
+    assert (on_gpu.device, on_gpu.piper_use_cuda) == ("cuda", True)
+    assert (on_cpu.device, on_cpu.piper_use_cuda) == ("cpu", False)
+    explicit = Settings.from_env({"DEVICE": "cpu"})
+    assert resolve_device(explicit, lambda: True) is explicit

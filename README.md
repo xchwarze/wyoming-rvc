@@ -241,7 +241,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DEVICE` | `cuda` | Device for RVC: `cuda` (refuses to start without a usable GPU) or `cpu` (debugging) |
+| `DEVICE` | `cuda` | Device for RVC: `cuda` (refuses to start without a usable GPU), `cpu`, or `auto` (CUDA when available, otherwise CPU; the add-on default) |
 | `SOURCE` | `piper` | `piper` (in-process) or `wyoming` (upstream Wyoming TTS) |
 | `WYOMING_UPSTREAM` | – | `tcp://host:port` of the upstream TTS (required when `SOURCE=wyoming`) |
 | `UPSTREAM_VOICE` / `UPSTREAM_SPEAKER` | upstream default | Voice/speaker requested from the upstream |
