@@ -13,6 +13,7 @@ Event flows handled (matching homeassistant/components/wyoming/tts.py):
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections.abc import Callable
 from functools import partial
@@ -115,9 +116,13 @@ class RvcEventHandler(AsyncEventHandler):
                 await self.write_event(SynthesizeStopped().event())
                 self._streaming = False
                 return True
+        except (ConnectionError, OSError) as err:
+            _LOGGER.debug("Wyoming client went away: %s", err)
+            return False
         except Exception as err:
             _LOGGER.exception("Wyoming synthesis failed")
-            await self.write_event(Error(text=str(err), code=err.__class__.__name__).event())
+            with contextlib.suppress(Exception):  # the client may already be gone
+                await self.write_event(Error(text=str(err), code=err.__class__.__name__).event())
             return False
 
         return True
@@ -139,9 +144,12 @@ class RvcEventHandler(AsyncEventHandler):
         if text:
             metrics = SynthesisMetrics()
             spc = self._settings.wyoming_samples_per_chunk
-            async for pcm in pipeline.stream(text, options, metrics):
-                for chunk in iter_pcm_chunks(pcm, spc, WIDTH, CHANNELS):
-                    await self.write_event(AudioChunk(rate=rate, width=WIDTH, channels=CHANNELS, audio=chunk).event())
+            # aclosing: a failed write must release the source and RVC slot right away, not at GC.
+            async with contextlib.aclosing(pipeline.stream(text, options, metrics)) as pcm_stream:
+                async for pcm in pcm_stream:
+                    for chunk in iter_pcm_chunks(pcm, spc, WIDTH, CHANNELS):
+                        event = AudioChunk(rate=rate, width=WIDTH, channels=CHANNELS, audio=chunk).event()
+                        await self.write_event(event)
             metrics.log(_LOGGER, source)
         await self.write_event(AudioStop().event())
 

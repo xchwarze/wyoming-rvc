@@ -122,3 +122,29 @@ async def test_streaming_disabled_advertised(server):
         await client.write_event(Describe().event())
         info = Info.from_event(await client.read_event())
     assert info.tts[0].supports_synthesize_streaming is False
+
+
+async def test_client_disconnect_mid_synthesis_releases_pipeline():
+    """A client that vanishes mid-audio must not leave the source open or the RVC slot taken."""
+    port = free_port()
+    settings = Settings.from_env({"WYOMING_HOST": "127.0.0.1", "WYOMING_PORT": str(port)})
+    piper, rvc = FakePiper(), FakeRvc(delay=0.05)
+    pipeline = TtsPipeline(piper, rvc, SynthesisOptions(mode="sentence"))
+    state = ServiceState(pipeline=pipeline, ready=True, stage="ready")
+    service = WyomingService(settings, state, lambda: build_info(settings, "x"))
+    await service.start()
+    try:
+        client = AsyncTcpClient("127.0.0.1", port)
+        await client.connect()
+        await client.write_event(Synthesize(text="Uno. Dos. Tres. Cuatro. Cinco. Seis.").event())
+        await client.read_event()  # audio-start
+        await client.disconnect()
+        for _ in range(100):
+            if piper.closed:
+                break
+            await asyncio.sleep(0.02)
+        assert piper.closed == 1
+        result = await asyncio.wait_for(pipeline.synthesize("Hola."), timeout=2)
+        assert result.pcm
+    finally:
+        await service.stop()

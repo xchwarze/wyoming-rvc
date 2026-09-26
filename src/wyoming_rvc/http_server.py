@@ -93,8 +93,9 @@ def create_app(state: ServiceState) -> FastAPI:
         async def body_iter() -> AsyncIterator[bytes]:
             yield streaming_wav_header(rate)
             try:
-                async for chunk in pipeline.stream(text, options, metrics):
-                    yield chunk
+                async with contextlib.aclosing(pipeline.stream(text, options, metrics)) as pcm_stream:
+                    async for chunk in pcm_stream:
+                        yield chunk
             except Exception:
                 _LOGGER.exception("Streaming synthesis failed")
                 raise
