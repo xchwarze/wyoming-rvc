@@ -51,7 +51,8 @@ class RvcModelInfo:
 class RvcEngine:
     """Load once with ``load()``, then call ``convert()``.
 
-    Not internally locked: callers serialize access (see ``TtsPipeline``).
+    Not internally locked: inference is reentrant, and ``TtsPipeline`` bounds concurrent
+    calls with ``RVC_CONCURRENCY`` (default 1).
     """
 
     def __init__(self, device: str = "cuda", x_pad: int = 1, x_query: int = 6, x_center: int = 38, x_max: int = 41):

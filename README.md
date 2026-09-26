@@ -251,7 +251,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `RVC_PROTECT` | `0.33` | Protect unvoiced consonants and breaths, 0…0.5 (0.5 = off) |
 | `RVC_F0_METHOD` | `rmvpe` | Pitch extractor (only `rmvpe`) |
 | `RVC_MODE` | `sentence` | `sentence` (lowest time to first audio) or `whole` (lowest total time) |
-| `RVC_CONCURRENCY` | `1` | Simultaneous conversions; extra requests wait in a queue, using no extra VRAM |
+| `RVC_CONCURRENCY` | `1` | Simultaneous conversions on the same loaded models. At 1, extra requests wait in a queue; each extra slot adds peak activation memory. |
 | `RVC_ASSETS_REPO_ID` / `RVC_ASSETS_REVISION` | `IAHispano/Applio` / `main` | Source of ContentVec and RMVPE |
 | `VOICE_NAME` / `VOICE_LANGUAGE` | `teto` / `es` | Voice advertised to Home Assistant |
 | `WYOMING_PROGRAM_NAME` | `Wyoming RVC` | Name shown in Home Assistant |
@@ -334,9 +334,10 @@ Design notes:
 * Audio is resampled once on the way in (source rate → 16 kHz) and sent at the model's
   native rate. There is no normalization beyond Applio's input peak guard and a
   clip-only output guard.
-* Blocking work runs in worker threads. RVC goes through one semaphore, so concurrent
-  requests queue instead of duplicating models or VRAM. If a client disconnects
-  mid-sentence, the in-flight step finishes and the source is closed (tested).
+* Blocking work runs in worker threads. Models are never duplicated: RVC calls go through
+  a semaphore (`RVC_CONCURRENCY`, default 1), so concurrent requests queue. If a client
+  disconnects mid-sentence, the in-flight conversion still finishes (and keeps its slot)
+  and the source is closed (tested).
 * SIGTERM closes Wyoming and HTTP and exits cleanly.
 
 ## Development and tests
@@ -378,10 +379,15 @@ work first. If it doesn't: install the toolkit, run
 
 **`DEVICE=cuda but torch.cuda.is_available() is False`.** The container has no GPU.
 Check the `deploy.resources.reservations.devices` block (or `--gpus all`), the toolkit,
-and the driver. `does not support … sm_XX` means the GPU is older than Turing.
+and the driver. A warning `No native kernels for … (sm_XX)` means torch has to JIT
+its kernels for that GPU; if the CUDA check right after it fails, the GPU is not supported.
 
 **Out of VRAM.** The service needs about 1 GB resident and about 2.5 GB peak. Keep
 `RVC_CONCURRENCY=1`, set `PIPER_DEVICE=cpu`, and close other GPU applications.
+
+**Running as non-root.** The image runs as root so that a bind-mounted `./models` works
+without extra steps. To run unprivileged, run `sudo chown -R 1000:1000 models` and add
+`user: "1000:1000"` to the service in `docker-compose.yml`.
 
 **Hugging Face download fails.** Check connectivity, set `HF_TOKEN` if you are rate-limited,
 or pre-populate `./models` and use absolute `PIPER_MODEL`/`RVC_MODEL_FILE`/`RVC_INDEX_FILE`.
