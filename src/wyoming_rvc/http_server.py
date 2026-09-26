@@ -74,9 +74,7 @@ def create_app(state: ServiceState) -> FastAPI:
             result = await pipeline.synthesize(text, options)
             with Stopwatch() as sw:
                 payload = wav_bytes(result.pcm, result.sample_rate)
-        except ValueError as err:
-            raise HTTPException(status_code=422, detail=str(err)) from err
-        except Exception as err:
+        except Exception as err:  # input was validated in _prepare: anything here is a server error
             _LOGGER.exception("Synthesis failed")
             raise HTTPException(status_code=500, detail=f"Synthesis failed: {err}") from err
         metrics = result.metrics

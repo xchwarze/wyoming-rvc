@@ -97,3 +97,14 @@ def test_tts_rejects_oversized_body():
     big = b'{"text": "' + b"a" * (2 << 20) + b'"}'
     r = make_client().post("/v1/tts", content=big, headers={"Content-Type": "application/json"})
     assert r.status_code == 413
+
+
+def test_internal_value_error_is_500_not_422():
+    rvc = FakeRvc()
+
+    def broken(*_args, **_kwargs):
+        raise ValueError("shape mismatch deep inside the engine")
+
+    rvc.convert = broken
+    r = make_client(rvc=rvc).post("/v1/tts", json={"text": "hola"})
+    assert r.status_code == 500
