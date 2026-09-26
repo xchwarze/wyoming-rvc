@@ -4,7 +4,7 @@
   python scripts/benchmark.py                       # server default mode
   python scripts/benchmark.py --disable-rvc         # TTS source only (no RVC)
   python scripts/benchmark.py --compare             # TTS-only vs every RVC mode
-  python scripts/benchmark.py --modes whole,stream -n 10 --json bench.json
+  python scripts/benchmark.py --modes whole,sentence -n 10 --json bench.json
   python scripts/benchmark.py --wyoming             # also measure TTFA over Wyoming
 
 Server-side timings come from the X-TTS-* response headers; TTFA is measured

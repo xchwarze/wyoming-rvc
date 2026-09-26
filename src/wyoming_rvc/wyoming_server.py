@@ -77,7 +77,6 @@ class RvcEventHandler(AsyncEventHandler):
         self._settings = settings
         self._streaming = False
         self._sbd = SentenceBoundaryDetector()
-        self._stream_metrics: list[SynthesisMetrics] = []
 
     async def handle_event(self, event: Event) -> bool:
         try:
@@ -101,7 +100,6 @@ class RvcEventHandler(AsyncEventHandler):
                 self._check_voice(start.voice)
                 self._streaming = True
                 self._sbd = SentenceBoundaryDetector()
-                self._stream_metrics = []
                 return True
 
             if SynthesizeChunk.is_type(event.type) and self._streaming:

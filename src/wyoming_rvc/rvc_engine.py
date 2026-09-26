@@ -82,8 +82,8 @@ class RvcEngine:
         from scipy import signal
 
         if self.device.startswith("cuda"):
-            # Full fp32 matmuls, as in Applio: TF32 would perturb the retrieval distances,
-            # which are weighted by 1/d^2 (nearest neighbours dominate).
+            # PyTorch's default, pinned explicitly: TF32 would perturb the retrieval
+            # distances, which are weighted by 1/d^2 (nearest neighbours dominate).
             torch.backends.cuda.matmul.allow_tf32 = False
             torch.backends.cudnn.benchmark = False  # input lengths vary per request
 

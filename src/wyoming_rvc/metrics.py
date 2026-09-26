@@ -1,4 +1,4 @@
-"""Per-request timing metrics and small statistics helpers."""
+"""Per-request timing metrics."""
 
 from __future__ import annotations
 

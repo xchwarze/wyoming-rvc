@@ -39,7 +39,7 @@ text ─► Source (per sentence) ─► RVC layer (optional) ─► PCM16 ─�
   * `WyomingSource` (new): at `load()`, sends `describe` (fails fast if the
     upstream has no installed TTS) and one probe synthesis to learn the sample rate.
     Per request it opens one TCP connection, splits the text with
-    `sentence_stream.SentenceBoundaryDetector`, sends one `synthesize` per sentence
+    `text.split_sentences` (abbreviation-aware regex), sends one `synthesize` per sentence
     and yields each sentence's audio, resampled to the nominal rate if the upstream
     rate differs. `UPSTREAM_VOICE` / `UPSTREAM_SPEAKER` select the upstream voice.
 * Everything else is kept: resident `RvcEngine`, zip-aware model loader, Wyoming
