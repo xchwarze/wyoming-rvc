@@ -19,6 +19,8 @@ from .pipeline import SynthesisOptions, TtsPipeline
 
 _LOGGER = logging.getLogger(__name__)
 
+MAX_BODY_BYTES = 1 << 20  # JSON requests only; rejects oversized bodies before buffering them
+
 
 @dataclass
 class ServiceState:
@@ -112,7 +114,14 @@ def create_app(state: ServiceState) -> FastAPI:
 
 async def _parse_body(request: Request) -> TtsRequest:
     """JSON body; tolerates cp1252 because Windows shells often re-encode curl arguments."""
-    raw = await request.body()
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="request body too large")
+    raw = bytearray()
+    async for part in request.stream():
+        raw += part
+        if len(raw) > MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="request body too large")
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:

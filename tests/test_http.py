@@ -90,3 +90,9 @@ def test_tts_accepts_cp1252_body_from_windows_shells():
 def test_tts_invalid_json():
     r = make_client().post("/v1/tts", content=b"{nope", headers={"Content-Type": "application/json"})
     assert r.status_code == 422 and "invalid JSON" in r.json()["error"]
+
+
+def test_tts_rejects_oversized_body():
+    big = b'{"text": "' + b"a" * (2 << 20) + b'"}'
+    r = make_client().post("/v1/tts", content=big, headers={"Content-Type": "application/json"})
+    assert r.status_code == 413

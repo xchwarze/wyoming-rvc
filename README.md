@@ -69,7 +69,7 @@ Without compose:
 
 ```bash
 docker run -d --name wyoming-rvc --gpus all --restart unless-stopped \
-  -p 8080:8080 -p 10200:10200 -v "$PWD/models:/models" \
+  -p 127.0.0.1:8080:8080 -p 10200:10200 -v "$PWD/models:/models" \
   ghcr.io/xchwarze/wyoming-rvc:latest
 ```
 
@@ -104,6 +104,9 @@ No custom component, REST command, or shell command is needed:
 To test, use **Developer tools → Actions → `tts.speak`**, or the ▶ button next to the voice in the assistant settings.
 
 * With Docker Desktop on Windows, use the Windows host's LAN IP and allow TCP 10200 in the firewall.
+* Neither port has authentication. Wyoming (10200) must be reachable by Home Assistant; the
+  compose file publishes the HTTP debug API (8080) on `127.0.0.1` only. Change it to
+  `"8080:8080"` if you need to reach it from another machine on a trusted network.
 * Streaming text input is advertised, so with LLM agents each sentence is spoken as soon as it is complete (`WYOMING_STREAMING=false` turns this off).
 * Zeroconf discovery is optional (`WYOMING_ZEROCONF=true`) and needs `network_mode: host` on a Linux host.
 
@@ -157,7 +160,7 @@ services:
     volumes: [./piper-data:/data]
   wyoming-rvc:
     image: ghcr.io/xchwarze/wyoming-rvc:latest
-    ports: ["10200:10200", "8080:8080"]
+    ports: ["10200:10200", "127.0.0.1:8080:8080"]
     volumes: [./models:/models]
     environment:
       - SOURCE=wyoming
