@@ -24,6 +24,7 @@ PIPER_VOICE_PATTERN = re.compile(
 CONTENTVEC_FILES = ("Resources/embedders/contentvec/config.json", "Resources/embedders/contentvec/pytorch_model.bin")
 RMVPE_FILE = "Resources/predictors/rmvpe.pt"
 _EXTRACT_MARKER = ".extracted.json"
+_MAX_MEMBER_BYTES = 4 << 30  # an RVC .pth/.index is well under 1 GB; guards against zip bombs
 
 
 class ModelResolutionError(RuntimeError):
@@ -194,10 +195,16 @@ def _extract_archives(snapshot: Path, dest_root: Path) -> list[Path]:
         dest.mkdir(parents=True)
         try:
             with zipfile.ZipFile(archive) as zf:
+                seen: set[str] = set()
                 for member in zf.infolist():
                     name = PurePosixPath(member.filename.replace("\\", "/")).name
                     if member.is_dir() or not name.lower().endswith((".pth", ".index")):
                         continue
+                    if name in seen:
+                        raise ModelResolutionError(f"{archive.name} has several files named {name!r}")
+                    if member.file_size > _MAX_MEMBER_BYTES:
+                        raise ModelResolutionError(f"{archive.name}: {name} is implausibly large")
+                    seen.add(name)
                     # Flatten to the basename: prevents path traversal ("zip slip").
                     with zf.open(member) as src, open(dest / name, "wb") as dst:
                         shutil.copyfileobj(src, dst, length=16 * 1024 * 1024)

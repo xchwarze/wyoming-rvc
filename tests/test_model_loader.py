@@ -121,3 +121,19 @@ def test_piper_voice_from_cache(tmp_path):
 def test_piper_bad_voice_name(tmp_path):
     with pytest.raises(ModelResolutionError, match="does not look like"):
         resolve_piper(settings(tmp_path, PIPER_VOICE="daniela"))
+
+
+def test_zip_with_duplicate_basenames_fails(tmp_path, repo):
+    with zipfile.ZipFile(repo / "Dup.zip", "w") as zf:
+        zf.writestr("a/voice.pth", b"1")
+        zf.writestr("b/voice.pth", b"2")
+    with pytest.raises(ModelResolutionError, match="several files named"):
+        resolve_rvc(settings(tmp_path))
+
+
+def test_zip_member_size_cap(tmp_path, repo, monkeypatch):
+    monkeypatch.setattr(model_loader, "_MAX_MEMBER_BYTES", 10)
+    with zipfile.ZipFile(repo / "Big.zip", "w") as zf:
+        zf.writestr("voice.pth", b"x" * 100)
+    with pytest.raises(ModelResolutionError, match="implausibly large"):
+        resolve_rvc(settings(tmp_path))
