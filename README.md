@@ -256,6 +256,22 @@ iterations, medians. These numbers were measured with the Spanish voice `es_AR-d
 
 Peak CUDA memory: about 1.8 GB allocated, 2.8 GB reserved (Piper and RVC together).
 
+**Switching voices** (`scripts/benchmark.py --switch teto,miku`, short phrase, same
+machine, English default Piper voice). Miku is
+[binant/Hatsune_Miku__RVC_v2_](https://huggingface.co/binant/Hatsune_Miku__RVC_v2_)
+(48 kHz, 223 MB index). A cold request includes loading the model and index into VRAM:
+
+| step | voice | `RVC_MAX_LOADED_MODELS=1` | load ms | total ms | `=2` | load ms | total ms |
+|---|---|---|---:|---:|---|---:|---:|
+| 1 | teto | warm | 0 | 638 | warm | 0 | 729 |
+| 2 | teto | warm | 0 | 454 | warm | 0 | 425 |
+| 3 | miku | cold | 801 | 1446 | cold | 808 | 1259 |
+| 4 | miku | warm | 0 | 462 | warm | 0 | 486 |
+| 5 | teto | cold | 317 | 762 | **warm** | 0 | 394 |
+
+Peak CUDA memory allocated: 1.34 GB with one resident voice, 1.52 GB with both. The load
+time is mostly the index; a voice without an `.index` loads faster.
+
 **What the numbers say**
 
 * In `sentence` mode, the **first audio arrives about 80–110 ms later than with the TTS

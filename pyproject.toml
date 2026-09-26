@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wyoming-rvc"
-version = "0.2.1"
+version = "0.3.0"
 description = "Wyoming TTS layer for Home Assistant that gives any voice an RVC timbre (in-process Piper or any upstream Wyoming TTS), fully resident on the GPU"
 readme = "README.md"
 license = "GPL-3.0-or-later"

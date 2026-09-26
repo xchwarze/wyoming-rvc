@@ -1,6 +1,6 @@
 ---
 name: Wyoming RVC
-version: "0.2.1"
+version: "0.3.0"
 slug: wyoming_rvc
 description: Give any text-to-speech voice an RVC timbre (Piper + RVC over Wyoming)
 url: https://github.com/xchwarze/wyoming-rvc
