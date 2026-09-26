@@ -28,9 +28,10 @@ def main() -> int:
             return 1
     port = int(os.environ.get("WYOMING_PORT") or 10200)
     try:
-        with socket.create_connection(("127.0.0.1", port), timeout=4) as sock:
+        with socket.create_connection(("127.0.0.1", port), timeout=4) as sock, sock.makefile("rb") as reply:
             sock.sendall(b'{"type": "describe"}\n')
-            return 0 if sock.recv(1) else 1
+            # Read the whole header line: closing with unread data would reset the connection.
+            return 0 if b'"info"' in reply.readline() else 1
     except OSError:
         return 1
 

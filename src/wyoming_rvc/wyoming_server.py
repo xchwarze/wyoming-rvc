@@ -80,11 +80,11 @@ class RvcEventHandler(AsyncEventHandler):
         self._stream_metrics: list[SynthesisMetrics] = []
 
     async def handle_event(self, event: Event) -> bool:
-        if Describe.is_type(event.type):
-            await self.write_event(self._info_factory().event())
-            return True
-
         try:
+            if Describe.is_type(event.type):
+                await self.write_event(self._info_factory().event())
+                return True
+
             if Synthesize.is_type(event.type):
                 if self._streaming:
                     return True  # compatibility copy of the streamed text
