@@ -246,7 +246,7 @@ class Service:
                 defaults=SynthesisOptions.from_settings(s),
                 stream_params=StreamParams(s.stream_chunk_ms, s.stream_context_ms, s.stream_overlap_ms),
                 rvc_concurrency=s.rvc_concurrency,
-                sentence_silence_ms=s.piper_sentence_silence_ms,
+                sentence_silence_ms=s.sentence_silence_ms,
             )
             self.state.pipeline = pipeline
             self.state.stage = "warmup"

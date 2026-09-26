@@ -248,7 +248,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `PIPER_MODEL` / `PIPER_CONFIG` | – | Explicit `.onnx` (and `.onnx.json`); overrides `PIPER_VOICE` |
 | `PIPER_DEVICE` | `auto` | `auto` (GPU when `DEVICE=cuda`), `cuda`, `cpu` |
 | `PIPER_LENGTH_SCALE`, `PIPER_NOISE_SCALE`, `PIPER_NOISE_W_SCALE`, `PIPER_SPEAKER_ID` | voice defaults | Piper synthesis options |
-| `PIPER_SENTENCE_SILENCE_MS` | `0` | Silence between sentences |
+| `SENTENCE_SILENCE_MS` | `0` | Silence inserted between sentences (any source) |
 | `RVC_ENABLED` | `true` | `false` passes the source audio through unchanged |
 | `RVC_REPO_ID` | `Slichi/KasaneTeto` | Hugging Face repo with the RVC model (`.pth`, `.index`, or `.zip` archives) |
 | `RVC_REVISION` | `main` | Pin a repo commit |

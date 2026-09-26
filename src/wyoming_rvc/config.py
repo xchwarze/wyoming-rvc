@@ -49,7 +49,7 @@ class Settings:
     piper_noise_scale: float | None = None
     piper_noise_w_scale: float | None = None
     piper_speaker_id: int | None = None
-    piper_sentence_silence_ms: int = 0
+    sentence_silence_ms: int = 0
 
     rvc_enabled: bool = True
     rvc_repo_id: str = "Slichi/KasaneTeto"
@@ -116,7 +116,7 @@ class Settings:
             piper_noise_scale=r.opt_float("PIPER_NOISE_SCALE", lo=0.0, hi=2.0),
             piper_noise_w_scale=r.opt_float("PIPER_NOISE_W_SCALE", lo=0.0, hi=2.0),
             piper_speaker_id=r.opt_int("PIPER_SPEAKER_ID", lo=0),
-            piper_sentence_silence_ms=r.int("PIPER_SENTENCE_SILENCE_MS", 0, lo=0, hi=5000),
+            sentence_silence_ms=r.int("SENTENCE_SILENCE_MS", 0, lo=0, hi=5000),
             rvc_enabled=r.bool("RVC_ENABLED", True),
             rvc_repo_id=r.str("RVC_REPO_ID", "Slichi/KasaneTeto"),
             rvc_revision=r.opt_str("RVC_REVISION"),
