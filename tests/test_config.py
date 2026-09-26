@@ -25,7 +25,7 @@ def test_overrides_and_empty_values():
             "DEVICE": "cpu",
             "RVC_PITCH": "-3",
             "RVC_INDEX_RATE": "0.75",
-            "RVC_MODE": "STREAM",
+            "RVC_MODE": "WHOLE",
             "RVC_MODEL_FILE": "",
             "PIPER_DEVICE": "cuda",
             "MODELS_DIR": "/data",
@@ -33,7 +33,7 @@ def test_overrides_and_empty_values():
     )
     assert s.device == "cpu"
     assert s.rvc_pitch == -3 and s.rvc_index_rate == 0.75
-    assert s.rvc_mode == "stream"
+    assert s.rvc_mode == "whole"
     assert s.rvc_model_file is None
     assert s.piper_use_cuda is True
     assert s.piper_data_dir == Path("/data/piper") and s.hf_home == Path("/data/huggingface")
@@ -55,7 +55,7 @@ def test_overrides_and_empty_values():
         {"SOURCE": "wyoming", "WYOMING_UPSTREAM": "http://x:1"},
         {"SOURCE": "wyoming", "WYOMING_UPSTREAM": "tcp://x:abc"},
         {"SOURCE": "espeak"},
-        {"STREAM_CHUNK_MS": "300", "STREAM_OVERLAP_MS": "300"},
+        {"RVC_MODE": "stream"},
         {"PIPER_CONFIG": "/x.json"},
         {"HTTP_PORT": "10200"},
     ],
@@ -84,4 +84,6 @@ def test_upstream_address(raw):
 
 def test_port_clash_detected_across_different_hosts():
     with pytest.raises(ConfigError):
-        Settings.from_env({"HTTP_HOST": "0.0.0.0", "WYOMING_HOST": "127.0.0.1", "HTTP_PORT": "9000", "WYOMING_PORT": "9000"})
+        Settings.from_env(
+            {"HTTP_HOST": "0.0.0.0", "WYOMING_HOST": "127.0.0.1", "HTTP_PORT": "9000", "WYOMING_PORT": "9000"}
+        )

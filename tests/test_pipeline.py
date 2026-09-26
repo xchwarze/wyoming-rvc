@@ -10,7 +10,7 @@ from wyoming_rvc.pipeline import SynthesisOptions, TtsPipeline, iterate_in_threa
 from wyoming_rvc.text import split_sentences
 
 
-@pytest.mark.parametrize("mode", ["whole", "sentence", "stream"])
+@pytest.mark.parametrize("mode", ["whole", "sentence"])
 async def test_modes_produce_rvc_rate_audio(pipeline, rvc, mode):
     result = await pipeline.synthesize("Hola. Soy Teto.", replace(pipeline.defaults, mode=mode))
     assert result.sample_rate == 32000
@@ -57,12 +57,6 @@ async def test_rvc_concurrency_two(piper):
     assert rvc.max_active == 2
 
 
-async def test_stream_yields_multiple_chunks(pipeline):
-    opts = replace(pipeline.defaults, mode="stream")
-    chunks = [c async for c in pipeline.stream("Hola. Chau.", opts)]
-    assert len(chunks) == 6
-
-
 async def test_empty_text_yields_nothing(pipeline):
     result = await pipeline.synthesize("   ")
     assert result.pcm == b""
@@ -87,7 +81,7 @@ async def test_semaphore_released_after_error(piper):
 
 async def test_abandoned_stream_releases_slot(piper):
     rvc = FakeRvc()
-    p = TtsPipeline(piper, rvc, SynthesisOptions(mode="stream"), rvc_concurrency=1)
+    p = TtsPipeline(piper, rvc, SynthesisOptions(mode="sentence"), rvc_concurrency=1)
     agen = p.stream("Uno. Dos. Tres.")
     await agen.__anext__()
     await agen.aclose()
@@ -111,7 +105,7 @@ def test_rvc_required_when_disabled_engine():
 
 async def test_warmup(pipeline, rvc):
     ms = await pipeline.warmup("Sistema iniciado.")
-    assert ms > 0 and rvc.calls == 3  # whole + sentence + stream
+    assert ms > 0 and rvc.calls == 2  # whole + sentence
 
 
 async def test_sentences_are_converted_in_order(piper, rvc):

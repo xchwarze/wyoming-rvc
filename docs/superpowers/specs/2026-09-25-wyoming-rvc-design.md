@@ -22,7 +22,7 @@ turned on or off with environment variables.
 | Voices per instance | **One**, chosen by env (`RVC_REPO_ID`, `RVC_MODEL_FILE`, `RVC_INDEX_FILE`) and always resident | Zero switch latency, minimal code. Another voice means another container. |
 | Audio source | `SOURCE=piper` (default: in-process, fastest) or `SOURCE=wyoming` (proxy to any Wyoming TTS via `WYOMING_UPSTREAM=tcp://host:port`) | The fast path stays in-process; the proxy makes this a drop-in layer for any TTS. |
 | Piper device | `PIPER_DEVICE=auto` (CUDA if `DEVICE=cuda`), `cuda`, `cpu` | Measured about 3× faster on GPU for long texts. The JIT cache lives in `/models/cuda-cache`. |
-| Default mode | `RVC_MODE=sentence` | Measured TTFA of about 200–270 ms, vs 0.4–2 s for `whole`. `whole` and `stream` (experimental) remain. |
+| Default mode | `RVC_MODE=sentence` | Measured TTFA of about 200–270 ms, vs 0.4–2 s for `whole`. `whole` remains (`stream` was later removed, see below). |
 | Toggles | `RVC_ENABLED`, `SOURCE`, `PIPER_DEVICE`, `RVC_MODE` | Env only; no config file. |
 
 ## Architecture
@@ -79,6 +79,7 @@ effects, extra pitch extractors, and a web UI.
 | RMVPE in a worker thread on a second CUDA stream, parallel to ContentVec | Short sentences 69 → 83 ms (GIL contention on kernel launches); only 6 s+ sentences gain. | **Rejected** |
 | Retrieval as exact k-NN on the GPU over the resident index vectors (instead of CPU FAISS IVF with nprobe=1) | −14 ms on 2.5–6.6 s sentences, same on short ones. Mel correlation with Applio 0.994 (was 0.996; RVC noise makes runs differ by about this much). | **Adopted** |
 | RMVPE fp16 autocast | 37 → 43 ms | Rejected |
+| `stream` mode (chunking inside a sentence with context + crossfade) | TTFA same as `sentence`, about 2× the RVC GPU time; about 120 lines plus 3 env vars | **Removed** after review |
 
 Result: in `sentence` mode, RVC adds about **85 ms** to the time to first audio over
 TTS-only (≈130 → ≈217 ms, Piper on GPU).

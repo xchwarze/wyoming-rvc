@@ -72,16 +72,6 @@ class FakeRvc:
         finally:
             self._exit()
 
-    def convert_stream(self, audio, sample_rate, pitch, f0_method, index_rate, protect, params):
-        self._enter()
-        try:
-            out = resample(audio, sample_rate, self.output_sample_rate)
-            for piece in np.array_split(out, 3):
-                time.sleep(self.delay / 3)
-                yield piece
-        finally:
-            self._exit()
-
 
 @pytest.fixture
 def piper() -> FakePiper:

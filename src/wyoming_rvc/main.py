@@ -126,11 +126,6 @@ class Service:
             },
             "rvc": {"source": self.rvc_source, **(rvc_info or {})} if s.rvc_enabled else None,
             "defaults": self.state.pipeline.defaults.__dict__ if self.state.pipeline else None,
-            "stream": {
-                "chunk_ms": s.stream_chunk_ms,
-                "context_ms": s.stream_context_ms,
-                "overlap_ms": s.stream_overlap_ms,
-            },
             "wyoming": {
                 "port": s.wyoming_port,
                 "program": s.program_name,
@@ -237,14 +232,12 @@ class Service:
             load.result()
 
             from .pipeline import SynthesisOptions, TtsPipeline
-            from .rvc_engine import StreamParams
             from .wyoming_server import WyomingService, build_info
 
             pipeline = TtsPipeline(
                 source=self.source,
                 rvc=self.rvc,
                 defaults=SynthesisOptions.from_settings(s),
-                stream_params=StreamParams(s.stream_chunk_ms, s.stream_context_ms, s.stream_overlap_ms),
                 rvc_concurrency=s.rvc_concurrency,
                 sentence_silence_ms=s.sentence_silence_ms,
             )

@@ -1,4 +1,4 @@
-"""Audio helpers: dtype conversion, resampling, clipping protection, WAV, crossfade."""
+"""Audio helpers: dtype conversion, resampling, clipping protection, WAV."""
 
 from __future__ import annotations
 
@@ -95,17 +95,6 @@ def iter_pcm_chunks(pcm: bytes, samples_per_chunk: int, width: int = 2, channels
     step = samples_per_chunk * width * channels
     for offset in range(0, len(pcm), step):
         yield pcm[offset : offset + step]
-
-
-def crossfade(tail: np.ndarray, head: np.ndarray) -> np.ndarray:
-    """Equal-power crossfade of two equally long segments."""
-    if tail.shape != head.shape:
-        raise ValueError(f"Crossfade segments differ in length: {tail.shape} vs {head.shape}")
-    n = tail.shape[0]
-    if n == 0:
-        return head
-    t = np.linspace(0.0, np.pi / 2, n, dtype=np.float32)
-    return tail * np.cos(t) + head * np.sin(t)
 
 
 def duration_ms(num_samples: int, sample_rate: int) -> float:

@@ -42,7 +42,7 @@ class TtsRequest(BaseModel):
     index_rate: float | None = Field(default=None, ge=0.0, le=1.0)
     protect: float | None = Field(default=None, ge=0.0, le=0.5)
     f0_method: Literal["rmvpe"] | None = None
-    mode: Literal["whole", "sentence", "stream"] | None = None
+    mode: Literal["whole", "sentence"] | None = None
     disable_rvc: bool = False
 
 

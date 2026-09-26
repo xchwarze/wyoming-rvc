@@ -9,13 +9,12 @@ exact k-NN retrieval). Applio re-creates RMVPE and re-reads the index per call.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
-from .audio import crossfade, prevent_clipping, resample, to_float32
+from .audio import prevent_clipping, resample, to_float32
 from .model_loader import RvcAssets, RvcFiles
 
 _LOGGER = logging.getLogger(__name__)
@@ -49,15 +48,8 @@ class RvcModelInfo:
     device: str
 
 
-@dataclass(frozen=True)
-class StreamParams:
-    chunk_ms: int = 1000
-    context_ms: int = 500
-    overlap_ms: int = 60
-
-
 class RvcEngine:
-    """Load once with ``load()``, then call ``convert()`` / ``convert_stream()``.
+    """Load once with ``load()``, then call ``convert()``.
 
     Not internally locked: callers serialize access (see ``TtsPipeline``).
     """
@@ -256,67 +248,6 @@ class RvcEngine:
         result = prevent_clipping(np.concatenate(out).astype(np.float32), OUTPUT_CEILING)
         return result, self._tgt_sr
 
-    def convert_stream(
-        self,
-        audio: np.ndarray,
-        sample_rate: int,
-        pitch: int = 0,
-        f0_method: str = "rmvpe",
-        index_rate: float = 0.6,
-        protect: float = 0.33,
-        params: StreamParams | None = None,
-    ) -> Iterator[np.ndarray]:
-        """Convert in chunks with rolling context and equal-power crossfades.
-
-        F0 is estimated once over the whole utterance (it is already available),
-        so chunking only affects content features and the generator.
-        """
-        x = self._prepare(audio, sample_rate)
-        n = x.size
-        if n == 0:
-            return
-        audio_pad = np.pad(x, (self.t_pad, self.t_pad), mode="reflect")
-        pitch_t, pitchf_t = self._f0(audio_pad, pitch, f0_method)
-        rate = index_rate if self._bank is not None else 0.0
-
-        params = params or StreamParams()
-        chunk = max(WINDOW, _frames(params.chunk_ms) * WINDOW)
-        overlap = min(_frames(params.overlap_ms) * WINDOW, chunk // 2)
-        context = min(_frames(params.context_ms) * WINDOW, self.t_pad - overlap)
-        tgt = self._tgt_sr
-
-        def to_tgt(samples: int) -> int:
-            return samples * tgt // INPUT_SR
-
-        tail = np.zeros(0, dtype=np.float32)
-        bounds = chunk_bounds(n, chunk, overlap)
-        for i, (s, e) in enumerate(bounds):
-            last = i == len(bounds) - 1
-            ov = 0 if last else overlap
-            ws = s + self.t_pad - context
-            we = min(e + self.t_pad + ov + context, audio_pad.size)
-            seg = audio_pad[ws:we]
-            f_s = ws // WINDOW
-            f_e = f_s + seg.size // WINDOW
-            p, pf = (pitch_t[:, f_s:f_e], pitchf_t[:, f_s:f_e]) if self._use_f0 else (None, None)
-            y = self._synthesize(self._features(seg, rate), seg.shape[0], p, pf, protect)
-
-            start = to_tgt(context)
-            keep = y[start : start + to_tgt(e - s + ov)]
-            want = to_tgt(e - s + ov)
-            if keep.size < want:
-                keep = np.pad(keep, (0, want - keep.size))
-
-            if tail.size:
-                keep = np.concatenate([crossfade(tail, keep[: tail.size]), keep[tail.size :]])
-            if last:
-                tail = np.zeros(0, dtype=np.float32)
-                emit = keep
-            else:
-                cut = keep.size - to_tgt(ov)
-                emit, tail = keep[:cut], keep[cut:]
-            yield np.clip(emit, -OUTPUT_CEILING, OUTPUT_CEILING).astype(np.float32)
-
     def memory_stats(self) -> dict[str, float]:
         import torch
 
@@ -454,20 +385,3 @@ class RvcEngine:
             mixed.append((self._bank[ix] * weight.unsqueeze(-1)).sum(dim=1))
         retrieved = torch.cat(mixed).unsqueeze(0)
         return retrieved * index_rate + (1 - index_rate) * feats
-
-
-def chunk_bounds(n: int, chunk: int, overlap: int) -> list[tuple[int, int]]:
-    """Split ``n`` samples into ``chunk``-sized spans; a short remainder joins the previous span.
-
-    The final span must be longer than the crossfade overlap, otherwise there is
-    nothing to fade into.
-    """
-    bounds = [(s, min(s + chunk, n)) for s in range(0, n, chunk)]
-    if len(bounds) > 1 and bounds[-1][1] - bounds[-1][0] < max(2 * overlap, chunk // 4):
-        last = bounds.pop()
-        bounds[-1] = (bounds[-1][0], last[1])
-    return bounds
-
-
-def _frames(ms: int) -> int:
-    return int(round(ms * INPUT_SR / 1000 / WINDOW))

@@ -31,18 +31,16 @@ def service():
 @pytest.fixture
 def pipeline(service):
     from wyoming_rvc.pipeline import SynthesisOptions, TtsPipeline
-    from wyoming_rvc.rvc_engine import StreamParams
 
     s = service.settings
     return TtsPipeline(
         service.source,
         service.rvc,
         SynthesisOptions.from_settings(s),
-        StreamParams(s.stream_chunk_ms, s.stream_context_ms, s.stream_overlap_ms),
     )
 
 
-@pytest.mark.parametrize("mode", ["whole", "sentence", "stream"])
+@pytest.mark.parametrize("mode", ["whole", "sentence"])
 async def test_real_synthesis(pipeline, mode):
     from dataclasses import replace
 

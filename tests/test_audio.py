@@ -78,28 +78,3 @@ def test_iter_pcm_chunks():
     chunks = list(audio.iter_pcm_chunks(pcm, 256))
     assert [len(c) for c in chunks] == [512, 512, 512, 464]
     assert b"".join(chunks) == pcm
-
-
-def test_crossfade_is_continuous():
-    tail = np.ones(100, dtype=np.float32)
-    head = np.zeros(100, dtype=np.float32)
-    mixed = audio.crossfade(tail, head)
-    assert np.isclose(mixed[0], 1.0) and np.isclose(mixed[-1], 0.0, atol=1e-6)
-    assert np.all(np.diff(mixed) <= 1e-6)
-
-
-def test_crossfade_length_mismatch():
-    with pytest.raises(ValueError):
-        audio.crossfade(np.zeros(3), np.zeros(4))
-
-
-@pytest.mark.parametrize("n", [1, 159, 16000, 16001, 16000 * 3 + 500, 16000 * 3 + 9000, 123457])
-def test_chunk_bounds_cover_input_and_last_exceeds_overlap(n):
-    from wyoming_rvc.rvc_engine import chunk_bounds
-
-    chunk, overlap = 16000, 960
-    bounds = chunk_bounds(n, chunk, overlap)
-    assert bounds[0][0] == 0 and bounds[-1][1] == n
-    assert all(a[1] == b[0] for a, b in zip(bounds, bounds[1:], strict=False))
-    if len(bounds) > 1:
-        assert bounds[-1][1] - bounds[-1][0] >= 2 * overlap

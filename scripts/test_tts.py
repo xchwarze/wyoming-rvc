@@ -95,7 +95,7 @@ def main() -> None:
     parser.add_argument("--pitch", type=int)
     parser.add_argument("--index-rate", type=float)
     parser.add_argument("--protect", type=float)
-    parser.add_argument("--mode", choices=["whole", "sentence", "stream"])
+    parser.add_argument("--mode", choices=["whole", "sentence"])
     parser.add_argument("--disable-rvc", action="store_true")
     args = parser.parse_args()
     if args.wyoming:

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 F0_METHODS: tuple[str, ...] = ("rmvpe",)
-RVC_MODES: tuple[str, ...] = ("whole", "sentence", "stream")
+RVC_MODES: tuple[str, ...] = ("whole", "sentence")
 SOURCES: tuple[str, ...] = ("piper", "wyoming")
 PIPER_DEVICES: tuple[str, ...] = ("auto", "cuda", "cpu")
 DEVICES: tuple[str, ...] = ("cuda", "cpu")
@@ -65,10 +65,6 @@ class Settings:
     rvc_protect: float = 0.33
     rvc_mode: str = "sentence"
     rvc_concurrency: int = 1
-
-    stream_chunk_ms: int = 1000
-    stream_context_ms: int = 500
-    stream_overlap_ms: int = 60
 
     warmup_text: str = "Sistema iniciado."
     max_text_chars: int = 5000
@@ -131,9 +127,6 @@ class Settings:
             rvc_protect=r.float("RVC_PROTECT", 0.33, lo=0.0, hi=0.5),
             rvc_mode=r.choice("RVC_MODE", "sentence", RVC_MODES),
             rvc_concurrency=r.int("RVC_CONCURRENCY", 1, lo=1, hi=8),
-            stream_chunk_ms=r.int("STREAM_CHUNK_MS", 1000, lo=200, hi=30000),
-            stream_context_ms=r.int("STREAM_CONTEXT_MS", 500, lo=0, hi=1000),
-            stream_overlap_ms=r.int("STREAM_OVERLAP_MS", 60, lo=0, hi=500),
             warmup_text=r.str("WARMUP_TEXT", "Sistema iniciado."),
             max_text_chars=r.int("MAX_TEXT_CHARS", 5000, lo=1, hi=100000),
             source=r.choice("SOURCE", "piper", SOURCES),
@@ -152,8 +145,6 @@ class Settings:
 
     def validate(self) -> None:
         """Cross-field validation."""
-        if self.stream_overlap_ms >= self.stream_chunk_ms:
-            raise ConfigError("STREAM_OVERLAP_MS must be smaller than STREAM_CHUNK_MS")
         if self.piper_config is not None and self.piper_model is None:
             raise ConfigError("PIPER_CONFIG requires PIPER_MODEL")
         if self.source == "wyoming":

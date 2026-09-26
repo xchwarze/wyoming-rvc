@@ -196,7 +196,7 @@ def main() -> None:
     parser.add_argument("--url", default="http://localhost:8080")
     parser.add_argument("-n", "--iterations", type=int, default=5)
     parser.add_argument("--warmup", type=int, default=1, help="unrecorded requests per phrase")
-    parser.add_argument("--modes", help="comma list of whole,sentence,stream (default: server default)")
+    parser.add_argument("--modes", help="comma list of whole,sentence (default: server default)")
     parser.add_argument("--disable-rvc", action="store_true", help="benchmark the TTS source without RVC")
     parser.add_argument("--compare", action="store_true", help="TTS-only plus every RVC mode")
     parser.add_argument("--phrases", help="comma list of " + ",".join(PHRASES))
@@ -225,9 +225,7 @@ def main() -> None:
 
     configs: list[tuple[str, dict]] = []
     if args.compare:
-        configs = [("tts-only", {"disable_rvc": True})] + [
-            (f"rvc-{m}", {"mode": m}) for m in ("whole", "sentence", "stream")
-        ]
+        configs = [("tts-only", {"disable_rvc": True})] + [(f"rvc-{m}", {"mode": m}) for m in ("whole", "sentence")]
     elif args.disable_rvc:
         configs = [("tts-only", {"disable_rvc": True})]
     elif args.modes:

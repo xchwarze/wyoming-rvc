@@ -3,7 +3,6 @@
 Modes (``RVC_MODE``):
   sentence  each sentence is converted as soon as the source produces it (default)
   whole     all sentences are synthesized, concatenated and converted in one RVC pass
-  stream    each sentence is converted in overlapping chunks (experimental)
 
 Sentences are converted one at a time on purpose: running the TTS for sentence
 N+1 concurrently with RVC for sentence N was measured to add ~55 ms to the time
@@ -42,17 +41,6 @@ class RvcLike(Protocol):
     def convert(
         self, audio: np.ndarray, sample_rate: int, pitch: int, f0_method: str, index_rate: float, protect: float
     ) -> tuple[np.ndarray, int]: ...
-
-    def convert_stream(
-        self,
-        audio: np.ndarray,
-        sample_rate: int,
-        pitch: int,
-        f0_method: str,
-        index_rate: float,
-        protect: float,
-        params: object,
-    ) -> Iterator[np.ndarray]: ...
 
 
 @dataclass(frozen=True)
@@ -134,14 +122,12 @@ class TtsPipeline:
         source: SourceLike,
         rvc: RvcLike | None,
         defaults: SynthesisOptions,
-        stream_params: object = None,
         rvc_concurrency: int = 1,
         sentence_silence_ms: int = 0,
     ) -> None:
         self.source = source
         self.rvc = rvc
         self.defaults = defaults.validate()
-        self.stream_params = stream_params
         self.sentence_silence_ms = sentence_silence_ms
         self._rvc_slots = asyncio.Semaphore(rvc_concurrency)
 
@@ -209,18 +195,13 @@ class TtsPipeline:
                     )
                     mark_first()
                     yield encode(converted)
-            elif options.mode == "sentence":
+            else:  # sentence
                 async for audio in sentences:
                     converted = await self._rvc_call(
                         lambda a=audio: self._convert(a, in_rate, options), rvc_sw, metrics
                     )
                     mark_first()
                     yield encode(converted)
-            else:
-                async for audio in sentences:
-                    async for piece in self._stream_rvc(audio, in_rate, options, rvc_sw, metrics):
-                        mark_first()
-                        yield encode(piece)
         finally:
             await sentences.aclose()
             metrics.source_ms = source_sw.elapsed_ms
@@ -267,24 +248,10 @@ class TtsPipeline:
                     with contextlib.suppress(BaseException):
                         await job
 
-    async def _stream_rvc(
-        self, audio: np.ndarray, rate: int, options: SynthesisOptions, sw: Stopwatch, metrics: SynthesisMetrics
-    ) -> AsyncIterator[np.ndarray]:
-        assert self.rvc is not None
-        queued = now_ms()
-        async with self._rvc_slots:
-            metrics.queue_ms += now_ms() - queued
-            gen = self.rvc.convert_stream(
-                audio, rate, options.pitch, options.f0_method, options.index_rate, options.protect, self.stream_params
-            )
-            async with contextlib.aclosing(iterate_in_thread(gen, sw)) as pieces:
-                async for piece in pieces:
-                    yield piece
-
     async def warmup(self, text: str) -> float:
         """Exercise every code path once so kernels and allocators are ready."""
         start = now_ms()
-        modes = ["whole", "sentence", "stream"] if self.rvc is not None and self.defaults.rvc else [self.defaults.mode]
+        modes = ["whole", "sentence"] if self.rvc is not None and self.defaults.rvc else [self.defaults.mode]
         for mode in modes:
             result = await self.synthesize(text, replace(self.defaults, mode=mode))
             if not result.pcm:

@@ -48,7 +48,7 @@ def test_tts_disable_rvc():
 
 
 def test_tts_stream():
-    r = make_client().post("/v1/tts/stream", json={"text": "Hola. Chau.", "mode": "stream"})
+    r = make_client().post("/v1/tts/stream", json={"text": "Hola. Chau.", "mode": "sentence"})
     assert r.status_code == 200
     assert r.content[:4] == b"RIFF" and len(r.content) > 44
 
@@ -63,6 +63,7 @@ def test_tts_stream():
         ({"text": "hola", "protect": 0.9}, 422),
         ({"text": "hola", "f0_method": "crepe"}, 422),
         ({"text": "hola", "mode": "turbo"}, 422),
+        ({"text": "hola", "mode": "stream"}, 422),
         ({"text": "hola", "unknown": 1}, 422),
         ({}, 422),
     ],

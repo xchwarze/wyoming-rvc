@@ -202,10 +202,6 @@ iterations, medians. Produced with `scripts/benchmark.py --compare --wyoming`.
 | `whole` | short | 265 | 108 | 383 | 426 | 397 | – | 3.28 | 0.117 |
 | `whole` | medium | 238 | 164 | 422 | 477 | 374 | – | 6.87 | 0.061 |
 | `whole` | long | 599 | 257 | 879 | 1024 | 851 | – | 17.20 | 0.051 |
-| `stream` | very short | 73 | 101 | 163 | 228 | 191 | – | 0.89 | 0.183 |
-| `stream` | short | 226 | 290 | 511 | 680 | 223 | – | 3.31 | 0.152 |
-| `stream` | medium | 256 | 503 | 789 | 973 | 234 | – | 6.88 | 0.114 |
-| `stream` | long | 617 | 1133 | 1831 | 1994 | 208 | – | 17.21 | 0.106 |
 
 Peak CUDA memory: about 1.8 GB allocated, 2.5 GB reserved (Piper and RVC together).
 
@@ -216,10 +212,6 @@ Peak CUDA memory: about 1.8 GB allocated, 2.5 GB reserved (Piper and RVC togethe
   than real time, so playback never waits.
 * `whole` has the lowest total time, but nothing plays until the entire text is
   converted (TTFA ≈ total). Use it for batch or offline generation.
-* `stream` (experimental) chunks inside each sentence with context and crossfade. Its TTFA
-  is similar to `sentence` and it costs about 2× more GPU time. It may help with very long
-  sentences on slower GPUs. Measured quality: mel correlation 0.991 vs 0.996 for `whole`,
-  and no clicks at chunk boundaries.
 * With `SOURCE=wyoming` and the official `wyoming-piper` running Piper on the CPU as
   upstream, RVC adds the same amount. The total is dominated by the upstream TTS.
 * Correctness: output matches Applio 3.6.5 for the same input and parameters (mel
@@ -230,7 +222,8 @@ Several latency ideas were measured and **rejected** because they made the first
 slower or added complexity for no audible gain: running the TTS for the next sentence
 concurrently with RVC (+55 ms TTFA), splitting the first sentence at a comma
 (−25 ms TTFA, +200 ms total), running pitch extraction on a second CUDA stream (slower for
-short sentences), and fp16 RMVPE (slower). Details are in
+short sentences), fp16 RMVPE (slower), and a `stream` mode that chunked inside each
+sentence with crossfades (same TTFA as `sentence` at about 2× the GPU time). Details are in
 `docs/superpowers/specs/2026-09-25-wyoming-rvc-design.md`.
 
 ## Configuration
@@ -257,9 +250,8 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `RVC_INDEX_RATE` | `0.6` | Retrieval strength, 0…1 (0 turns it off) |
 | `RVC_PROTECT` | `0.33` | Protect unvoiced consonants and breaths, 0…0.5 (0.5 = off) |
 | `RVC_F0_METHOD` | `rmvpe` | Pitch extractor (only `rmvpe`) |
-| `RVC_MODE` | `sentence` | `sentence`, `whole`, `stream` (experimental) |
+| `RVC_MODE` | `sentence` | `sentence` (lowest time to first audio) or `whole` (lowest total time) |
 | `RVC_CONCURRENCY` | `1` | Simultaneous conversions; extra requests wait in a queue, using no extra VRAM |
-| `STREAM_CHUNK_MS` / `STREAM_CONTEXT_MS` / `STREAM_OVERLAP_MS` | `1000` / `500` / `60` | `stream` mode tuning |
 | `RVC_ASSETS_REPO_ID` / `RVC_ASSETS_REVISION` | `IAHispano/Applio` / `main` | Source of ContentVec and RMVPE |
 | `VOICE_NAME` / `VOICE_LANGUAGE` | `teto` / `es` | Voice advertised to Home Assistant |
 | `WYOMING_PROGRAM_NAME` | `Wyoming RVC` | Name shown in Home Assistant |
@@ -328,10 +320,10 @@ request:  text ─► source, one sentence at a time (worker thread) ─► one 
 | `piper_engine.py` | Resident Piper voice (source `piper`) |
 | `wyoming_source.py` | Upstream Wyoming TTS client (source `wyoming`) |
 | `model_loader.py` | Resolves or downloads Piper, RVC (zip-aware) and assets; cache first |
-| `rvc_engine.py` | Resident RVC: `load()`, `convert()`, `convert_stream()` |
+| `rvc_engine.py` | Resident RVC: `load()`, `convert()` |
 | `pipeline.py` | Source → RVC per mode, concurrency queue, metrics |
 | `wyoming_server.py` / `http_server.py` | Front-ends |
-| `audio.py`, `text.py`, `metrics.py` | PCM/resample/WAV/crossfade, sentence splitting, timings |
+| `audio.py`, `text.py`, `metrics.py` | PCM/resample/WAV, sentence splitting, timings |
 | `vendor/applio/` | Minimal RVC network and RMVPE code from Applio (MIT) |
 
 Design notes:
@@ -408,10 +400,11 @@ and listen. No single value is right for every source voice. For a male source v
 and a female target, start around +6…+9.
 
 **Metallic or robotic output.** Lower `RVC_INDEX_RATE` (0.3–0.5), raise `RVC_PROTECT`
-toward 0.5, keep the pitch shift small, and prefer `sentence`/`whole` over `stream`.
+toward 0.5, and keep the pitch shift small.
 
-**Artifacts or clicks.** These usually come from `stream` mode with short chunks: raise
-`STREAM_CHUNK_MS`/`STREAM_CONTEXT_MS`, keep `STREAM_OVERLAP_MS` ≥ 40, or use `sentence`.
+**Artifacts between sentences.** Each sentence is converted on its own in `sentence` mode.
+If joins sound uneven, try `SENTENCE_SILENCE_MS=80`, or `RVC_MODE=whole` (one pass with
+full context, at the cost of a later first audio).
 
 **CPU fallback.** `DEVICE=cpu` works for debugging, but RVC on the CPU runs at roughly
 real time or slower.
@@ -428,7 +421,6 @@ shown above, or `scripts/test_tts.py`.
 
 * One voice per instance; run another container for another voice.
 * Only the `rmvpe` pitch extractor and ContentVec-based models; the RefineGAN vocoder is not supported.
-* `stream` mode is experimental and not faster to the first audio than `sentence`.
 * Upstream sources must send 16-bit PCM (every known Wyoming TTS does).
 * x86-64 Linux image with NVIDIA only; the image is about 7 GB because the PyTorch wheels bundle the CUDA runtime.
 * Home Assistant interoperability is verified with HA's integration code in a test harness.
