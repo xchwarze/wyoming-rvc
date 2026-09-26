@@ -47,7 +47,7 @@ EXPOSE 8080 10200
 
 # Ready only after every model is loaded and warmed up (first start downloads ~1 GB).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=900s --retries=3 \
-    CMD ["python", "-c", "import os,sys,urllib.request; p=os.environ.get('HTTP_PORT','8080'); sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{p}/readyz', timeout=4).status == 200 else 1)"]
+    CMD ["python", "-m", "wyoming_rvc.healthcheck"]
 
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["python", "-m", "wyoming_rvc.main"]

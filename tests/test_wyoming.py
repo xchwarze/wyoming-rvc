@@ -148,3 +148,13 @@ async def test_client_disconnect_mid_synthesis_releases_pipeline():
         assert result.pcm
     finally:
         await service.stop()
+
+
+async def test_healthcheck_uses_wyoming_when_http_disabled(server, monkeypatch):
+    from wyoming_rvc import healthcheck
+
+    monkeypatch.setenv("HTTP_ENABLED", "false")
+    monkeypatch.setenv("WYOMING_PORT", str(server))
+    assert await asyncio.to_thread(healthcheck.main) == 0
+    monkeypatch.setenv("WYOMING_PORT", str(free_port()))
+    assert await asyncio.to_thread(healthcheck.main) == 1
