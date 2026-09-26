@@ -14,7 +14,7 @@ text ─► TTS source ─► RVC voice layer ─► PCM 16-bit ─► Wyoming �
 * **Built for low latency.** Everything is resident in memory: the Piper voice, the RVC
   generator, ContentVec, RMVPE, and the retrieval index vectors on the GPU. No
   subprocesses, temp files, or model loads per request. With the defaults on an
-  RTX 5080, RVC adds **about 85–100 ms** to the time to first audio.
+  RTX 5080, RVC adds **about 80–110 ms** to the time to first audio.
 * **Native Home Assistant integration.** Add it through the built-in *Wyoming Protocol*
   integration, including streaming text input from LLM agents. Interoperability is
   tested against Home Assistant's own integration code.
@@ -190,24 +190,24 @@ iterations, medians. Produced with `scripts/benchmark.py --compare --wyoming`.
 
 | config | phrase (words) | TTS ms | RVC ms | total ms | total p95 | TTFA ms | Wyoming TTFA | audio s | RTF |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| TTS only | very short (3) | 101 | – | 102 | 121 | 109 | – | 0.89 | 0.110 |
-| TTS only | short (10) | 256 | – | 257 | 330 | 144 | – | 3.31 | 0.078 |
-| TTS only | medium (25) | 258 | – | 260 | 309 | 129 | – | 6.89 | 0.038 |
-| TTS only | long (66) | 617 | – | 620 | 677 | 144 | – | 17.28 | 0.036 |
-| **`sentence`** (default) | very short | 89 | 133 | 226 | 308 | 234 | 165 | 0.90 | 0.248 |
-| **`sentence`** | short | 225 | 216 | 466 | 551 | 193 | 221 | 3.27 | 0.144 |
-| **`sentence`** | medium | 235 | 259 | 512 | 608 | 231 | 264 | 6.81 | 0.075 |
-| **`sentence`** | long | 669 | 596 | 1256 | 1513 | 244 | 249 | 17.15 | 0.073 |
-| `whole` | very short | 58 | 78 | 131 | 183 | 202 | – | 0.87 | 0.153 |
-| `whole` | short | 265 | 108 | 383 | 426 | 397 | – | 3.28 | 0.117 |
-| `whole` | medium | 238 | 164 | 422 | 477 | 374 | – | 6.87 | 0.061 |
-| `whole` | long | 599 | 257 | 879 | 1024 | 851 | – | 17.20 | 0.051 |
+| TTS only | very short (3) | 78 | – | 78 | 148 | 91 | – | 0.90 | 0.090 |
+| TTS only | short (10) | 272 | – | 273 | 340 | 140 | – | 3.29 | 0.083 |
+| TTS only | medium (25) | 253 | – | 254 | 307 | 128 | – | 6.84 | 0.037 |
+| TTS only | long (66) | 672 | – | 674 | 801 | 121 | – | 17.24 | 0.039 |
+| **`sentence`** (default) | very short | 80 | 85 | 177 | 278 | 171 | 188 | 0.88 | 0.199 |
+| **`sentence`** | short | 264 | 181 | 488 | 552 | 231 | 239 | 3.26 | 0.150 |
+| **`sentence`** | medium | 264 | 244 | 513 | 655 | 227 | 218 | 6.84 | 0.076 |
+| **`sentence`** | long | 586 | 579 | 1178 | 1234 | 230 | 228 | 17.15 | 0.069 |
+| `whole` | very short | 87 | 78 | 186 | 232 | 183 | – | 0.89 | 0.214 |
+| `whole` | short | 267 | 151 | 440 | 521 | 372 | – | 3.32 | 0.133 |
+| `whole` | medium | 248 | 149 | 402 | 470 | 375 | – | 6.82 | 0.059 |
+| `whole` | long | 652 | 256 | 910 | 1091 | 924 | – | 17.25 | 0.053 |
 
-Peak CUDA memory: about 1.8 GB allocated, 2.5 GB reserved (Piper and RVC together).
+Peak CUDA memory: about 1.8 GB allocated, 2.8 GB reserved (Piper and RVC together).
 
 **What the numbers say**
 
-* In `sentence` mode, the **first audio arrives about 85–100 ms later than with the TTS
+* In `sentence` mode, the **first audio arrives about 80–110 ms later than with the TTS
   alone**, whatever the length of the text. The remaining audio is produced 7–14× faster
   than real time, so playback never waits.
 * `whole` has the lowest total time, but nothing plays until the entire text is
