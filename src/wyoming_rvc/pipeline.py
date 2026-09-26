@@ -258,7 +258,14 @@ class TtsPipeline:
                 with sw:
                     return fn()
 
-            return await asyncio.to_thread(work)
+            # A cancelled request cannot stop the GPU thread; keep the slot until it ends.
+            job = asyncio.ensure_future(asyncio.to_thread(work))
+            try:
+                return await asyncio.shield(job)
+            finally:
+                if not job.done():
+                    with contextlib.suppress(BaseException):
+                        await job
 
     async def _stream_rvc(
         self, audio: np.ndarray, rate: int, options: SynthesisOptions, sw: Stopwatch, metrics: SynthesisMetrics

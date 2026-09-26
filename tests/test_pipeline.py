@@ -167,3 +167,16 @@ async def test_iterate_in_thread_cancel_mid_step():
 )
 def test_split_sentences(text, expected):
     assert split_sentences(text) == expected
+
+
+async def test_cancelled_request_keeps_rvc_slot_until_conversion_ends(piper):
+    """A client disconnect must not let the next request run a second conversion on the GPU."""
+    rvc = FakeRvc(delay=0.2)
+    p = TtsPipeline(piper, rvc, SynthesisOptions(mode="sentence"), rvc_concurrency=1)
+    first = asyncio.create_task(p.synthesize("Uno."))
+    await asyncio.sleep(0.05)  # first conversion is running in its worker thread
+    first.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    await p.synthesize("Dos.")
+    assert rvc.max_active == 1
