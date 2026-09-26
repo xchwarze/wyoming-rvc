@@ -174,3 +174,23 @@ async def test_cancelled_request_keeps_rvc_slot_until_conversion_ends(piper):
         await first
     await p.synthesize("Dos.")
     assert rvc.max_active == 1
+
+
+async def test_run_in_daemon_thread_result_error_and_daemon():
+    import threading
+
+    from wyoming_rvc.main import run_in_daemon_thread
+
+    seen = {}
+
+    def work():
+        seen["daemon"] = threading.current_thread().daemon
+        return 42
+
+    assert await run_in_daemon_thread(work) == 42 and seen["daemon"] is True
+
+    def fail():
+        raise ValueError("boom")
+
+    with pytest.raises(ValueError, match="boom"):
+        await run_in_daemon_thread(fail)

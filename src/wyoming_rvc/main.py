@@ -9,7 +9,9 @@ import logging
 import os
 import signal
 import sys
+import threading
 import time
+from collections.abc import Callable
 from typing import Any
 
 from . import __version__
@@ -94,6 +96,33 @@ def report_torch(settings: Settings) -> dict[str, Any]:
             )
         torch.zeros(1, device="cuda").sum().item()  # fail now, not on the first request
     return facts
+
+
+async def run_in_daemon_thread(fn: Callable[[], Any]) -> Any:
+    """Like ``asyncio.to_thread`` but on a daemon thread.
+
+    Model loading (downloads included) cannot be interrupted; a daemon thread lets
+    SIGTERM end the process at once instead of joining the executor at shutdown.
+    """
+    loop = asyncio.get_running_loop()
+    future: asyncio.Future = loop.create_future()
+
+    def deliver(setter: Callable[[Any], None], value: Any) -> None:
+        if not future.done():
+            setter(value)
+
+    def target() -> None:
+        try:
+            result = fn()
+        except BaseException as err:  # noqa: BLE001 - re-raised in the awaiting task
+            outcome = (future.set_exception, err)
+        else:
+            outcome = (future.set_result, result)
+        with contextlib.suppress(RuntimeError):  # loop already closed after shutdown
+            loop.call_soon_threadsafe(deliver, *outcome)
+
+    threading.Thread(target=target, name="load-models", daemon=True).start()
+    return await future
 
 
 class Service:
@@ -224,7 +253,7 @@ class Service:
 
         try:
             self.torch_facts = await asyncio.to_thread(report_torch, s)
-            load = asyncio.create_task(asyncio.to_thread(self.load_models), name="load")
+            load = asyncio.create_task(run_in_daemon_thread(self.load_models), name="load")
             done, _ = await asyncio.wait({load, asyncio.create_task(stop.wait())}, return_when=asyncio.FIRST_COMPLETED)
             if load not in done:
                 _LOGGER.warning("Shutdown requested during model loading")
