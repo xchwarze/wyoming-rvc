@@ -1,0 +1,13 @@
+*
+!Dockerfile
+!pyproject.toml
+!requirements.lock
+!requirements-onnxruntime-gpu.lock
+!README.md
+!LICENSE
+!THIRD_PARTY_LICENSES.md
+!src/
+!scripts/
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info

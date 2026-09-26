@@ -1,0 +1,29 @@
+# Model weights are never committed
+/models/
+*.pth
+*.index
+*.onnx
+*.onnx.json
+*.pt
+*.bin
+*.safetensors
+*.zip
+
+# Generated audio
+*.wav
+/out/
+/benchmark-*.json
+
+.env
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.idea/
+.vscode/

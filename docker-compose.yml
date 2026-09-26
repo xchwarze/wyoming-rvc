@@ -1,0 +1,25 @@
+services:
+  wyoming-rvc:
+    build: .
+    image: ghcr.io/xchwarze/wyoming-rvc:latest
+    ports:
+      - "8080:8080"   # HTTP (debug / benchmark)
+      - "10200:10200" # Wyoming (Home Assistant)
+    volumes:
+      - ./models:/models
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - DEVICE=${DEVICE:-cuda}
+      - RVC_REPO_ID=${RVC_REPO_ID:-Slichi/KasaneTeto}
+      - PIPER_VOICE=${PIPER_VOICE:-es_AR-daniela-high}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    stop_grace_period: 30s
+    restart: unless-stopped

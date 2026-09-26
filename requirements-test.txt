@@ -1,0 +1,13 @@
+# Unit tests only: no torch, no model downloads.
+numpy==2.4.6
+scipy==1.18.0
+soxr==1.1.0
+fastapi==0.141.1
+uvicorn==0.54.0
+httpx==0.28.1
+wyoming==1.10.2
+sentence-stream==1.3.0
+huggingface-hub==1.33.0
+pytest==9.1.1
+pytest-asyncio==1.4.0
+ruff==0.16.9

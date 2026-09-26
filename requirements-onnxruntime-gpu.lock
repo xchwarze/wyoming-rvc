@@ -1,0 +1,7 @@
+# Installed in the image in place of the CPU-only onnxruntime pulled in by piper-tts.
+# It still contains the CPU provider (the default); PIPER_USE_CUDA=true enables CUDA.
+# 1.26.0 is the newest onnxruntime-gpu on PyPI built for CUDA 12, matching the
+# CUDA 12.8 / cuDNN 9 libraries that torch==2.11.0+cu128 already installs
+# (flatbuffers, numpy, packaging, protobuf are pinned in requirements.lock).
+onnxruntime-gpu==1.26.0 \
+    --hash=sha256:3c01119ed4d9449d60367fa8ccffcd02bd3fe736754284e4b198d131f54edad6

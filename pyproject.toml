@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wyoming-rvc"
+version = "0.1.0"
+description = "Wyoming TTS layer for Home Assistant that gives any voice an RVC timbre (in-process Piper or any upstream Wyoming TTS), fully resident on the GPU"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE", "THIRD_PARTY_LICENSES.md", "src/wyoming_rvc/vendor/applio/LICENSE"]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "piper-tts==1.8.0",
+    "wyoming==1.10.2",
+    "sentence-stream==1.3.0",
+    "zeroconf==0.151.3",
+    "fastapi==0.141.1",
+    "uvicorn==0.54.0",
+    "huggingface-hub",
+    "numpy==2.4.6",
+    "scipy==1.18.0",
+    "soxr==1.1.0",
+    "faiss-cpu==1.14.3",
+    "torch==2.11.0",
+    "transformers==5.13.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "httpx==0.28.1",
+]
+
+[project.scripts]
+wyoming-rvc = "wyoming_rvc.main:run"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"wyoming_rvc.vendor.applio" = ["LICENSE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = ["integration: requires downloaded models and (optionally) a GPU"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["src/wyoming_rvc/vendor"]
+
+[tool.ruff.lint]
+select = ["F", "E9", "B", "UP", "I"]
