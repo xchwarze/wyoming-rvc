@@ -27,18 +27,18 @@ import urllib.parse
 import urllib.request
 
 PHRASES = {
-    "very_short": "Hola, soy Teto.",
-    "short": "Buenos días. La temperatura del living es de veintidós grados.",
+    "very_short": "Hi, I am Teto.",
+    "short": "Good morning. The living room temperature is twenty two degrees.",
     "medium": (
-        "Listo, encendí las luces de la cocina y del pasillo. También bajé las persianas "
-        "del dormitorio y programé la alarma para mañana a las siete."
+        "Done, I turned on the kitchen and hallway lights. I also lowered the bedroom "
+        "blinds and set the alarm for seven tomorrow morning."
     ),
     "long": (
-        "Te cuento cómo está la casa. La puerta principal está cerrada con llave y la alarma "
-        "está activada. En el living hay veintidós grados y la humedad es del cincuenta por "
-        "ciento. El lavarropas terminó hace diez minutos, así que podés sacar la ropa cuando "
-        "quieras. Mañana se esperan lluvias por la tarde, por eso te recomiendo llevar paraguas "
-        "si vas a salir después del mediodía."
+        "Here is how the house is doing. The front door is locked and the alarm is armed. "
+        "The living room is at twenty two degrees and the humidity is fifty percent. The "
+        "washing machine finished ten minutes ago, so you can take the clothes out whenever "
+        "you like. Rain is expected tomorrow afternoon, so I recommend taking an umbrella if "
+        "you are going out after noon today."
     ),
 }
 WAV_HEADER = 44

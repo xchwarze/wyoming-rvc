@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Synthesize one phrase through the running service and save a WAV.
 
-  python scripts/test_tts.py "Hola, soy Teto." -o teto.wav            # HTTP
-  python scripts/test_tts.py "Hola, soy Teto." -o teto.wav --wyoming  # Wyoming (like Home Assistant)
+  python scripts/test_tts.py "Hi, I am Teto." -o teto.wav            # HTTP
+  python scripts/test_tts.py "Hi, I am Teto." -o teto.wav --wyoming  # Wyoming (like Home Assistant)
 
 Only the standard library is needed for HTTP; --wyoming needs the ``wyoming`` package.
 """
@@ -86,7 +86,7 @@ async def via_wyoming(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("text", nargs="?", default="Hola, soy Teto. ¿En qué te puedo ayudar?")
+    parser.add_argument("text", nargs="?", default="Hi, I am Teto. How can I help you?")
     parser.add_argument("-o", "--output", default="teto.wav")
     parser.add_argument("--url", default="http://localhost:8080")
     parser.add_argument("--wyoming", action="store_true", help="use Wyoming instead of HTTP")

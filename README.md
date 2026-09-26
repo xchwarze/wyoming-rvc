@@ -79,17 +79,17 @@ Check that it works:
 docker compose exec wyoming-rvc nvidia-smi                       # GPU visible in the container
 curl http://localhost:8080/readyz                                # {"ready":true,...}
 curl -X POST http://localhost:8080/v1/tts -H "Content-Type: application/json" \
-     -d '{"text":"Hola, soy Teto."}' --output teto.wav
+     -d '{"text":"Hi, I am Teto."}' --output teto.wav
 docker compose exec wyoming-rvc python scripts/benchmark.py --compare --wyoming
 ```
 
 On Windows PowerShell, use `curl.exe` and escape the quotes:
-`curl.exe -X POST http://localhost:8080/v1/tts -H "Content-Type: application/json" -d '{\"text\":\"Hola, soy Teto.\"}' --output teto.wav`.
+`curl.exe -X POST http://localhost:8080/v1/tts -H "Content-Type: application/json" -d '{\"text\":\"Hi, I am Teto.\"}' --output teto.wav`.
 Or avoid shell quoting completely:
 
 ```bash
-docker compose exec wyoming-rvc python scripts/test_tts.py "Hola, soy Teto." -o /models/teto.wav
-docker compose exec wyoming-rvc python scripts/test_tts.py "Hola, soy Teto." -o /models/teto.wav --wyoming
+docker compose exec wyoming-rvc python scripts/test_tts.py "Hi, I am Teto." -o /models/teto.wav
+docker compose exec wyoming-rvc python scripts/test_tts.py "Hi, I am Teto." -o /models/teto.wav --wyoming
 ```
 
 ## Home Assistant
@@ -98,7 +98,7 @@ No custom component, REST command, or shell command is needed:
 
 1. **Settings → Devices & Services → Add Integration → Wyoming Protocol**
 2. **Host:** the IP of the machine running the container; **Port:** `10200`
-3. The entry **Wyoming RVC** appears, with the TTS entity `tts.wyoming_rvc` and the voice `teto` (`es`).
+3. The entry **Wyoming RVC** appears, with the TTS entity `tts.wyoming_rvc` and the voice `teto` (`en`).
 4. **Settings → Voice assistants →** your assistant **→ Text-to-speech:** choose **Wyoming RVC**.
 
 To test, use **Developer tools → Actions → `tts.speak`**, or the ▶ button next to the voice in the assistant settings.
@@ -137,7 +137,7 @@ Playback on a physical speaker still needs a manual check on your installation.
       - RVC_INDEX_FILE=added_voice.index    # only if it has several .index files
       - RVC_PITCH=0                         # semitones; tune by ear
       - VOICE_NAME=myvoice
-      - VOICE_LANGUAGE=es
+      - VOICE_LANGUAGE=en
 ```
 
 To use local files instead, mount them and set absolute paths:
@@ -145,9 +145,17 @@ To use local files instead, mount them and set absolute paths:
 instance serves one voice. For a second voice, run a second container on another port
 and add it to Home Assistant as another Wyoming entry.
 
-**Another Piper voice:** `PIPER_VOICE=en_US-lessac-high` (any voice from
-[rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices)), or your own model
-with `PIPER_MODEL=/models/x.onnx`.
+**Another Piper voice or language.** The default source voice is `en_US-ljspeech-high`
+(female, US English). Any voice from
+[rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices) works, or your own model
+with `PIPER_MODEL=/models/x.onnx`. For another language, also set the language Home
+Assistant should list and a warmup phrase in that language. For example, Spanish:
+
+```yaml
+      - PIPER_VOICE=es_AR-daniela-high   # or es_MX-claude-high, es_ES-davefx-medium, ...
+      - VOICE_LANGUAGE=es
+      - WARMUP_TEXT=Sistema iniciado.
+```
 
 **Another TTS (layer mode).** Put wyoming-rvc in front of an existing Wyoming TTS. Home
 Assistant talks to wyoming-rvc, and wyoming-rvc talks to the upstream:
@@ -156,7 +164,7 @@ Assistant talks to wyoming-rvc, and wyoming-rvc talks to the upstream:
 services:
   piper:
     image: rhasspy/wyoming-piper
-    command: --voice es_AR-daniela-high
+    command: --voice en_US-ljspeech-high
     volumes: [./piper-data:/data]
   wyoming-rvc:
     image: ghcr.io/xchwarze/wyoming-rvc:latest
@@ -165,7 +173,7 @@ services:
     environment:
       - SOURCE=wyoming
       - WYOMING_UPSTREAM=tcp://piper:10200
-      # - UPSTREAM_VOICE=es_AR-daniela-high   # optional voice/speaker for the upstream
+      # - UPSTREAM_VOICE=en_US-ljspeech-high   # optional voice/speaker for the upstream
     deploy:
       resources:
         reservations:
@@ -179,9 +187,10 @@ is converted and sent as soon as the upstream returns it.
 
 ## Performance
 
-RTX 5080 16 GB, Ryzen 9 5900X (WSL 2: 6 cores / 12 threads), warm models, defaults
-(`SOURCE=piper` with Piper on the GPU, `RVC_MODE=sentence`, TetoTalk 32 kHz), 10
-iterations, medians. Produced with `scripts/benchmark.py --compare --wyoming`.
+RTX 5080 16 GB, Ryzen 9 5900X (WSL 2: 6 cores / 12 threads), warm models,
+`SOURCE=piper` with Piper on the GPU, `RVC_MODE=sentence`, TetoTalk 32 kHz, 10
+iterations, medians. These numbers were measured with the Spanish voice `es_AR-daniela-high`
+(same size and architecture as the English default) and Spanish phrases of the same lengths. Produced with `scripts/benchmark.py --compare --wyoming`.
 
 * **TTS** is time spent in the source.
 * **Total** is server processing time.
@@ -237,7 +246,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `WYOMING_UPSTREAM` | – | `tcp://host:port` of the upstream TTS (required when `SOURCE=wyoming`) |
 | `UPSTREAM_VOICE` / `UPSTREAM_SPEAKER` | upstream default | Voice/speaker requested from the upstream |
 | `UPSTREAM_TIMEOUT_S` | `30` | Connect/read timeout for the upstream |
-| `PIPER_VOICE` | `es_AR-daniela-high` | Any [Piper voice](https://huggingface.co/rhasspy/piper-voices), downloaded once to `/models/piper` |
+| `PIPER_VOICE` | `en_US-ljspeech-high` | Any [Piper voice](https://huggingface.co/rhasspy/piper-voices), downloaded once to `/models/piper` |
 | `PIPER_MODEL` / `PIPER_CONFIG` | – | Explicit `.onnx` (and `.onnx.json`); overrides `PIPER_VOICE` |
 | `PIPER_DEVICE` | `auto` | `auto` (GPU when `DEVICE=cuda`), `cuda`, `cpu` |
 | `PIPER_LENGTH_SCALE`, `PIPER_NOISE_SCALE`, `PIPER_NOISE_W_SCALE`, `PIPER_SPEAKER_ID` | voice defaults | Piper synthesis options |
@@ -253,7 +262,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `RVC_MODE` | `sentence` | `sentence` (lowest time to first audio) or `whole` (lowest total time) |
 | `RVC_CONCURRENCY` | `1` | Simultaneous conversions on the same loaded models. At 1, extra requests wait in a queue; each extra slot adds peak activation memory. |
 | `RVC_ASSETS_REPO_ID` / `RVC_ASSETS_REVISION` | `IAHispano/Applio` / `main` | Source of ContentVec and RMVPE |
-| `VOICE_NAME` / `VOICE_LANGUAGE` | `teto` / `es` | Voice advertised to Home Assistant |
+| `VOICE_NAME` / `VOICE_LANGUAGE` | `teto` / `en` | Voice advertised to Home Assistant (set the language to match `PIPER_VOICE`) |
 | `WYOMING_PROGRAM_NAME` | `Wyoming RVC` | Name shown in Home Assistant |
 | `WYOMING_HOST` / `WYOMING_PORT` | `0.0.0.0` / `10200` | Wyoming server |
 | `WYOMING_STREAMING` | `true` | Advertise streaming text input |
@@ -262,7 +271,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `HTTP_ENABLED` / `HTTP_HOST` / `HTTP_PORT` | `true` / `0.0.0.0` / `8080` | Debug API |
 | `MODELS_DIR` | `/models` | Root for downloads (`piper/`, `rvc/`, `huggingface/`, `cuda-cache/`) |
 | `HF_HOME` / `HF_TOKEN` | `$MODELS_DIR/huggingface` / – | Hugging Face cache and optional token (the CUDA JIT cache goes to `$MODELS_DIR/cuda-cache`) |
-| `WARMUP_TEXT` | `Sistema iniciado.` | Synthesized and discarded at startup (use your voice's language) |
+| `WARMUP_TEXT` | `System ready.` | Synthesized and discarded at startup (use your voice's language) |
 | `MAX_TEXT_CHARS` | `5000` | HTTP request limit |
 | `LOG_LEVEL` / `LOG_FORMAT` | `INFO` / `text` | `LOG_FORMAT=json` gives structured logs |
 
@@ -289,7 +298,7 @@ For debugging and benchmarks only; Home Assistant uses Wyoming.
 | `POST` | `/v1/metrics/reset` | Reset the CUDA peak-memory counters |
 
 ```json
-{"text": "Hola, soy Teto.", "pitch": 0, "index_rate": 0.6, "protect": 0.33,
+{"text": "Hi, I am Teto.", "pitch": 0, "index_rate": 0.6, "protect": 0.33,
  "f0_method": "rmvpe", "mode": "sentence", "disable_rvc": false}
 ```
 
@@ -451,5 +460,5 @@ It vendors minimal inference code from [Applio](https://github.com/IAHispano/App
 **No model weights are included** in the repository or the image; they are downloaded
 at runtime from their original locations. TetoTalk (`Slichi/KasaneTeto`) declares
 `openrail`. Kasane Teto is a character/voicebank by TWINDRILL with its own terms. The
-Piper voice dataset is CC BY-SA 4.0. Check the license of any voice you use, and do not
+default Piper voice is trained on LJ Speech (public domain). Check the license of any voice you use, and do not
 use voice conversion to impersonate real people.

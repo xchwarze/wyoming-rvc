@@ -113,9 +113,9 @@ def test_piper_explicit_model_missing_config(tmp_path):
 
 def test_piper_voice_from_cache(tmp_path):
     base = tmp_path / "models" / "piper"
-    touch(base / "es_AR-daniela-high.onnx")
-    touch(base / "es_AR-daniela-high.onnx.json", b"{}")
-    assert resolve_piper(settings(tmp_path)).model == base / "es_AR-daniela-high.onnx"
+    touch(base / "en_US-ljspeech-high.onnx")
+    touch(base / "en_US-ljspeech-high.onnx.json", b"{}")
+    assert resolve_piper(settings(tmp_path)).model == base / "en_US-ljspeech-high.onnx"
 
 
 def test_piper_bad_voice_name(tmp_path):

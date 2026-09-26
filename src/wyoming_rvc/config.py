@@ -39,7 +39,7 @@ class Settings:
     models_dir: Path = Path("/models")
     hf_home: Path = Path("/models/huggingface")
 
-    piper_voice: str = "es_AR-daniela-high"
+    piper_voice: str = "en_US-ljspeech-high"
     piper_model: Path | None = None
     piper_config: Path | None = None
     piper_data_dir: Path = Path("/models/piper")
@@ -66,7 +66,7 @@ class Settings:
     rvc_mode: str = "sentence"
     rvc_concurrency: int = 1
 
-    warmup_text: str = "Sistema iniciado."
+    warmup_text: str = "System ready."
     max_text_chars: int = 5000
 
     source: str = "piper"
@@ -77,7 +77,7 @@ class Settings:
 
     program_name: str = "Wyoming RVC"
     voice_name: str = "teto"
-    voice_language: str = "es"
+    voice_language: str = "en"
 
     log_level: str = "INFO"
     log_format: str = "text"
@@ -102,7 +102,7 @@ class Settings:
             wyoming_samples_per_chunk=r.int("WYOMING_SAMPLES_PER_CHUNK", 1024, lo=64, hi=65536),
             models_dir=models_dir,
             hf_home=r.path("HF_HOME", models_dir / "huggingface"),
-            piper_voice=r.str("PIPER_VOICE", "es_AR-daniela-high"),
+            piper_voice=r.str("PIPER_VOICE", "en_US-ljspeech-high"),
             piper_model=r.opt_path("PIPER_MODEL"),
             piper_config=r.opt_path("PIPER_CONFIG"),
             piper_data_dir=r.path("PIPER_DATA_DIR", models_dir / "piper"),
@@ -127,7 +127,7 @@ class Settings:
             rvc_protect=r.float("RVC_PROTECT", 0.33, lo=0.0, hi=0.5),
             rvc_mode=r.choice("RVC_MODE", "sentence", RVC_MODES),
             rvc_concurrency=r.int("RVC_CONCURRENCY", 1, lo=1, hi=8),
-            warmup_text=r.str("WARMUP_TEXT", "Sistema iniciado."),
+            warmup_text=r.str("WARMUP_TEXT", "System ready."),
             max_text_chars=r.int("MAX_TEXT_CHARS", 5000, lo=1, hi=100000),
             source=r.choice("SOURCE", "piper", SOURCES),
             wyoming_upstream=r.opt_str("WYOMING_UPSTREAM"),
@@ -136,7 +136,7 @@ class Settings:
             upstream_timeout_s=r.float("UPSTREAM_TIMEOUT_S", 30.0, lo=1.0, hi=600.0),
             program_name=r.str("WYOMING_PROGRAM_NAME", "Wyoming RVC"),
             voice_name=r.str("VOICE_NAME", "teto"),
-            voice_language=r.str("VOICE_LANGUAGE", "es"),
+            voice_language=r.str("VOICE_LANGUAGE", "en"),
             log_level=r.choice("LOG_LEVEL", "INFO", ("DEBUG", "INFO", "WARNING", "ERROR"), upper=True),
             log_format=r.choice("LOG_FORMAT", "text", ("text", "json")),
         )

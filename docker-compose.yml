@@ -13,7 +13,7 @@ services:
     environment:
       - DEVICE=${DEVICE:-cuda}
       - RVC_REPO_ID=${RVC_REPO_ID:-Slichi/KasaneTeto}
-      - PIPER_VOICE=${PIPER_VOICE:-es_AR-daniela-high}
+      - PIPER_VOICE=${PIPER_VOICE:-en_US-ljspeech-high}
     deploy:
       resources:
         reservations:

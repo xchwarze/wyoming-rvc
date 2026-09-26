@@ -54,7 +54,7 @@ async def test_describe(server):
     assert program.name == "Wyoming RVC" and program.installed
     assert program.supports_synthesize_streaming is True
     voice = program.voices[0]
-    assert voice.name == "teto" and voice.languages == ["es"] and voice.installed
+    assert voice.name == "teto" and voice.languages == ["en"] and voice.installed
 
 
 async def test_synthesize_like_home_assistant(server):

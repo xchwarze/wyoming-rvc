@@ -23,7 +23,7 @@ from .text import split_sentences
 
 _LOGGER = logging.getLogger(__name__)
 
-PROBE_TEXT = "Hola."
+PROBE_TEXT = "Hello."
 
 
 class UpstreamError(RuntimeError):

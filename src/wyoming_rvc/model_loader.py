@@ -67,7 +67,7 @@ def resolve_piper(settings: Settings) -> PiperFiles:
     match = PIPER_VOICE_PATTERN.match(voice)
     if not match:
         raise ModelResolutionError(
-            f"PIPER_VOICE {voice!r} does not look like '<lang>_<REGION>-<name>-<quality>', e.g. es_AR-daniela-high"
+            f"PIPER_VOICE {voice!r} does not look like '<lang>_<REGION>-<name>-<quality>', e.g. en_US-ljspeech-high"
         )
     lang_code = f"{match['family']}_{match['region']}"
     repo_dir = f"{match['family']}/{lang_code}/{match['name']}/{match['quality']}"

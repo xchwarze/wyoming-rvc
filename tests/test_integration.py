@@ -44,7 +44,7 @@ def pipeline(service):
 async def test_real_synthesis(pipeline, mode):
     from dataclasses import replace
 
-    text = "Hola. Soy HAL. Todos los sistemas están funcionando correctamente."
+    text = "Hello. I am HAL. All systems are functioning normally."
     result = await pipeline.synthesize(text, replace(pipeline.defaults, mode=mode))
     audio = pcm16_to_float(result.pcm)
     assert result.sample_rate == pipeline.rvc.output_sample_rate

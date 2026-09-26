@@ -16,7 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
 ENTITY_ID = "tts.wyoming_rvc"
-TEXT = "Hola. Soy Teto, tu asistente. Todos los sistemas están funcionando correctamente."
+TEXT = "Hello. I am Teto, your assistant. All systems are functioning normally."
 
 
 def pcm_stats(pcm: bytes) -> tuple[int, float]:
@@ -56,8 +56,8 @@ async def test_config_flow_exposes_tts_entity(hass: HomeAssistant, server) -> No
     state = hass.states.get(ENTITY_ID)
     assert state is not None, [s.entity_id for s in hass.states.async_all()]
     entity = hass.data[DATA_COMPONENT].get_entity(ENTITY_ID)
-    assert entity.supported_languages == ["es"]
-    voices = entity.async_get_supported_voices("es")
+    assert entity.supported_languages == ["en"]
+    voices = entity.async_get_supported_voices("en")
     assert voices and voices[0].voice_id == "teto"
     assert entity.async_supports_streaming_input() is True
 
@@ -66,7 +66,7 @@ async def test_entity_get_tts_audio(hass: HomeAssistant, server, save_audio) -> 
     """WyomingTtsProvider.async_get_tts_audio (non-streaming request)."""
     await add_wyoming_entry(hass, *server)
     entity = hass.data[DATA_COMPONENT].get_entity(ENTITY_ID)
-    extension, data = await entity.async_get_tts_audio(TEXT, "es", {tts.ATTR_VOICE: "teto"})
+    extension, data = await entity.async_get_tts_audio(TEXT, "en", {tts.ATTR_VOICE: "teto"})
     assert extension == "wav" and data
     save_audio("ha_entity.wav", data)
     rate, width, channels, frames = read_wav(data)
@@ -81,7 +81,7 @@ async def test_tts_manager_with_ffmpeg_conversion(hass: HomeAssistant, server, s
     stream = tts.async_create_stream(
         hass,
         ENTITY_ID,
-        "es",
+        "en",
         {
             tts.ATTR_VOICE: "teto",
             tts.ATTR_PREFERRED_FORMAT: "wav",
@@ -105,11 +105,11 @@ async def test_streaming_text_input(hass: HomeAssistant, server, save_audio) -> 
     await add_wyoming_entry(hass, *server)
 
     async def message_gen():
-        for piece in ["Hola, ", "soy Teto. ", "Encendí las luces ", "de la cocina. ", "¿Algo más?"]:
+        for piece in ["Hi, ", "I am Teto. ", "I turned on the lights ", "in the kitchen. ", "Anything else?"]:
             yield piece
 
     # Without preferred_* options the TTS manager transcodes to MP3; ask for WAV to inspect it.
-    stream = tts.async_create_stream(hass, ENTITY_ID, "es", {tts.ATTR_VOICE: "teto", tts.ATTR_PREFERRED_FORMAT: "wav"})
+    stream = tts.async_create_stream(hass, ENTITY_ID, "en", {tts.ATTR_VOICE: "teto", tts.ATTR_PREFERRED_FORMAT: "wav"})
     stream.async_set_message_stream(message_gen())
     data = b"".join([chunk async for chunk in stream.async_stream_result()])
     save_audio("ha_streaming.wav", data)
@@ -122,8 +122,8 @@ async def test_streaming_text_input(hass: HomeAssistant, server, save_audio) -> 
 async def test_default_playback_format_is_mp3(hass: HomeAssistant, server, save_audio) -> None:
     """What a media player receives by default: HA transcodes the Wyoming WAV to MP3 with ffmpeg."""
     await add_wyoming_entry(hass, *server)
-    stream = tts.async_create_stream(hass, ENTITY_ID, "es", {tts.ATTR_VOICE: "teto"})
-    stream.async_set_message("Hola, soy Teto.")
+    stream = tts.async_create_stream(hass, ENTITY_ID, "en", {tts.ATTR_VOICE: "teto"})
+    stream.async_set_message("Hi, I am Teto.")
     data = b"".join([chunk async for chunk in stream.async_stream_result()])
     save_audio("ha_default.mp3", data)
     assert stream.extension == "mp3"

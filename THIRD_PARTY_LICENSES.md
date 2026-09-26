@@ -50,5 +50,5 @@ Check each license yourself before use.
 | Weights | Source | License as published by the source |
 |---|---|---|
 | TetoTalk RVC (`KasaneTetotalkV1_240e_7680s`) | [Slichi/KasaneTeto](https://huggingface.co/Slichi/KasaneTeto) | Model card declares `license: openrail`. Kasane Teto is a character/voicebank by TWINDRILL; its own terms of use apply to the voice. |
-| Piper voice `es_AR-daniela-high` | [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices) | Dataset: [OpenSLR 61](https://www.openslr.org/61/), CC BY-SA 4.0 (see the voice's `MODEL_CARD`). |
+| Piper voice `en_US-ljspeech-high` (default) | [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices) | Dataset: [LJ Speech](https://keithito.com/LJ-Speech-Dataset/), public domain (see the voice's `MODEL_CARD`). Other voices have their own licenses; check each `MODEL_CARD`. |
 | ContentVec embedder, RMVPE pitch model | [IAHispano/Applio](https://huggingface.co/IAHispano/Applio) (`Resources/`) | Repo declares MIT. Upstream: [ContentVec](https://github.com/auspicious3000/contentvec) (MIT), [RMVPE](https://github.com/Dream-High/RMVPE) (Apache-2.0). |

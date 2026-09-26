@@ -9,13 +9,13 @@ def test_defaults():
     s = Settings.from_env({})
     assert s.device == "cuda"
     assert s.http_port == 8080 and s.wyoming_port == 10200
-    assert s.piper_voice == "es_AR-daniela-high"
+    assert s.piper_voice == "en_US-ljspeech-high"
     assert s.piper_device == "auto" and s.piper_use_cuda is True  # auto follows DEVICE=cuda
     assert s.source == "piper"
     assert s.rvc_repo_id == "Slichi/KasaneTeto"
     assert (s.rvc_f0_method, s.rvc_pitch, s.rvc_index_rate, s.rvc_protect) == ("rmvpe", 0, 0.6, 0.33)
     assert s.rvc_mode == "sentence" and s.rvc_concurrency == 1
-    assert (s.program_name, s.voice_name, s.voice_language) == ("Wyoming RVC", "teto", "es")
+    assert (s.program_name, s.voice_name, s.voice_language) == ("Wyoming RVC", "teto", "en")
     assert s.hf_home == Path("/models/huggingface")
 
 
