@@ -89,8 +89,9 @@ class RvcEngine:
         from scipy import signal
 
         if self.device.startswith("cuda"):
-            torch.backends.cuda.matmul.allow_tf32 = True
-            torch.backends.cudnn.allow_tf32 = True
+            # Full fp32 matmuls, as in Applio: TF32 would perturb the retrieval distances,
+            # which are weighted by 1/d^2 (nearest neighbours dominate).
+            torch.backends.cuda.matmul.allow_tf32 = False
             torch.backends.cudnn.benchmark = False  # input lengths vary per request
 
         # Same 48 Hz high-pass Applio applies to the 16 kHz input.
@@ -434,8 +435,12 @@ class RvcEngine:
             y = self._net_g.infer(feats.float(), lengths, pitch, pitchf, self._sid)[0][0, 0]
             return y.float().cpu().numpy()
 
-    def _retrieve(self, feats, index_rate: float, block: int = 1024):
-        """Blend features with their 8 nearest training vectors (exact L2, weights 1/d²)."""
+    def _retrieve(self, feats, index_rate: float, block: int = 256):
+        """Blend features with their 8 nearest training vectors (exact L2, weights 1/d²).
+
+        Queries go in blocks so the (block x index size) distance matrix stays small
+        (256 x 25k vectors = 26 MB).
+        """
         import torch
 
         q = feats[0]
