@@ -298,6 +298,9 @@ class Service:
             self.state.ready = True
             self.state.stage = "ready"
             _LOGGER.info("Service ready")
+            from .addon import announce_wyoming
+
+            await asyncio.to_thread(announce_wyoming, s.wyoming_port, os.environ)
             await stop.wait()
         finally:
             _LOGGER.info("Shutting down...")
@@ -314,6 +317,9 @@ class Service:
 
 def run() -> None:
     started = now_ms()
+    from .addon import apply_options
+
+    addon = apply_options(os.environ)  # Home Assistant add-on options, if running as one
     try:
         settings = Settings.from_env()
     except ConfigError as err:
@@ -321,7 +327,7 @@ def run() -> None:
         _LOGGER.error("Invalid configuration: %s", err)
         sys.exit(2)
     setup_logging(settings.log_level, settings.log_format)
-    _LOGGER.info("Loading configuration... wyoming-rvc %s", __version__)
+    _LOGGER.info("Loading configuration... wyoming-rvc %s%s", __version__, " (Home Assistant add-on)" if addon else "")
     _LOGGER.info("Settings: %s", settings.summary(), extra={"fields": {"settings": settings.summary()}})
     # Caches follow MODELS_DIR; set before torch/onnxruntime/huggingface_hub are imported.
     os.environ.setdefault("HF_HOME", str(settings.hf_home))
