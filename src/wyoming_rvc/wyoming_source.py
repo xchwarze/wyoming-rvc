@@ -55,7 +55,7 @@ class WyomingSource:
     def load(self) -> None:
         """Check the upstream offers TTS and learn its sample rate with one probe."""
         with self._connect() as (_, stream):
-            write_event(Describe().event(), stream)
+            self._write(stream, Describe().event())
             event = self._read(stream)
             if not Info.is_type(event.type):
                 raise UpstreamError(f"Upstream replied {event.type!r} to describe")
@@ -91,6 +91,13 @@ class WyomingSource:
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         return _Connection(sock)
 
+    @staticmethod
+    def _write(stream, event) -> None:
+        try:
+            write_event(event, stream)
+        except OSError as err:
+            raise UpstreamError(f"Upstream connection failed: {err}") from err
+
     def _read(self, stream):
         try:
             event = read_event(stream)
@@ -103,7 +110,7 @@ class WyomingSource:
         return event
 
     def _synthesize(self, stream, text: str) -> tuple[np.ndarray, int]:
-        write_event(Synthesize(text=text, voice=self.voice).event(), stream)
+        self._write(stream, Synthesize(text=text, voice=self.voice).event())
         rate, width, channels = 0, 2, 1
         buffer = bytearray()
         while True:

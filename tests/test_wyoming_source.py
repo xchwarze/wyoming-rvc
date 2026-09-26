@@ -74,3 +74,18 @@ async def test_pipeline_converts_upstream_audio(upstream):
     result = await p.synthesize("Uno. Dos.")
     assert result.sample_rate == 32000 and result.metrics.sentences == 2
     assert abs(len(result.pcm) // 2 - 0.5 * 32000) < 100
+
+
+async def test_upstream_write_failure_is_an_upstream_error(upstream, monkeypatch):
+    """A dead upstream must surface as UpstreamError (sent to HA), not as a client disconnect."""
+    from wyoming_rvc import wyoming_source
+
+    source = WyomingSource("127.0.0.1", upstream)
+    await asyncio.to_thread(source.load)
+
+    def broken(*_args, **_kwargs):
+        raise BrokenPipeError("upstream went away")
+
+    monkeypatch.setattr(wyoming_source, "write_event", broken)
+    with pytest.raises(UpstreamError, match="upstream went away"):
+        await asyncio.to_thread(lambda: list(source.sentences("Hola.")))
