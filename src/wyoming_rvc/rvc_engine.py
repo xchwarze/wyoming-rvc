@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -110,9 +111,28 @@ def load_checkpoint(path: Path) -> dict:
     return ckpt
 
 
-def checkpoint_sample_rate(path: Path) -> int:
-    """Output sample rate of a checkpoint (validates it too), without building the model."""
-    return int(load_checkpoint(path)["config"][-1])
+def validate_voice_files(model: Path, index: Path | None) -> int:
+    """Check a model and its index can be served, without loading them; returns the sample rate."""
+    ckpt = load_checkpoint(model)
+    if index is not None:
+        import faiss
+
+        try:  # memory-mapped: reads the header, not the vectors
+            _check_index_dim(faiss.read_index(str(index), faiss.IO_FLAG_MMAP | faiss.IO_FLAG_READ_ONLY), ckpt, index)
+        except RvcLoadError:
+            raise
+        except Exception as err:
+            raise RvcLoadError(f"Could not read FAISS index {index}: {err}") from err
+    return int(ckpt["config"][-1])
+
+
+def _check_index_dim(index: Any, ckpt: dict, path: Path) -> None:
+    version = str(ckpt.get("version", "v1"))
+    expected = 768 if version == "v2" else 256
+    if index.d != expected:
+        raise RvcLoadError(
+            f"Model/index mismatch: index {path.name} has dimension {index.d}, an RVC {version} model needs {expected}"
+        )
 
 
 class RvcEngine:
@@ -209,12 +229,7 @@ class RvcEngine:
             big_npy = index.reconstruct_n(0, index.ntotal)
         except Exception as err:
             raise RvcLoadError(f"Could not read FAISS index {path}: {err}") from err
-        expected = 768 if self._version == "v2" else 256
-        if index.d != expected:
-            raise RvcLoadError(
-                f"Model/index mismatch: index {path.name} has dimension {index.d}, "
-                f"an RVC {self._version} model needs {expected}"
-            )
+        _check_index_dim(index, {"version": self._version}, path)
         import torch
 
         # Retrieval runs on the device as exact k-NN over the reconstructed vectors,

@@ -234,7 +234,7 @@ class Service:
             _LOGGER.warning("RVC_ENABLED=false: serving the TTS source unchanged")
             return
 
-        from .rvc_engine import RvcEngine, SharedModels, checkpoint_sample_rate
+        from .rvc_engine import RvcEngine, SharedModels, validate_voice_files
 
         self.state.stage = "loading-rvc"
         configs, default_voice = load_voice_configs(s)
@@ -247,7 +247,7 @@ class Service:
                 voice.repo_id, voice.revision, voice.model_file, voice.index_file, s.rvc_data_dir, f"voice {voice.id}"
             )
             _LOGGER.info("Voice %s: model=%s index=%s", voice.id, files.model, files.index or "none")
-            return files, checkpoint_sample_rate(files.model)
+            return files, validate_voice_files(files.model, files.index)
 
         def load(voice, files):
             engine = RvcEngine(shared)
