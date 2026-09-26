@@ -125,7 +125,7 @@ class RvcEngine:
             f0=self._use_f0,
             embedder=embedder,
             vocoder=str(ckpt.get("vocoder", "HiFi-GAN")),
-            speakers=int(ckpt["config"][-3]),
+            speakers=int(self._net_g.emb_g.weight.shape[0]),
             epoch=int(ckpt["epoch"]) if isinstance(ckpt.get("epoch"), (int, float)) else None,
             index_vectors=vectors,
             device=self.device,

@@ -178,4 +178,6 @@ class WyomingService:
     async def stop(self) -> None:
         await self._server.stop()
         if self._zeroconf is not None:
-            await self._zeroconf._aiozc.async_close()  # no public close() in wyoming.zeroconf
+            # wyoming.zeroconf has no public close(); tolerate the private attribute changing.
+            with contextlib.suppress(AttributeError):
+                await self._zeroconf._aiozc.async_close()
