@@ -158,7 +158,7 @@ class Settings:
             raise ConfigError("PIPER_CONFIG requires PIPER_MODEL")
         if self.source == "wyoming":
             self.upstream_address()  # raises ConfigError when missing or malformed
-        if self.http_enabled and self.http_port == self.wyoming_port and self.http_host == self.wyoming_host:
+        if self.http_enabled and self.http_port == self.wyoming_port:
             raise ConfigError("HTTP_PORT and WYOMING_PORT must differ")
 
     @property

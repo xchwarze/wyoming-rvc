@@ -80,3 +80,8 @@ def test_piper_device_auto_follows_device():
 def test_upstream_address(raw):
     s = Settings.from_env({"SOURCE": "wyoming", "WYOMING_UPSTREAM": raw})
     assert s.upstream_address() == ("piper", 10200)
+
+
+def test_port_clash_detected_across_different_hosts():
+    with pytest.raises(ConfigError):
+        Settings.from_env({"HTTP_HOST": "0.0.0.0", "WYOMING_HOST": "127.0.0.1", "HTTP_PORT": "9000", "WYOMING_PORT": "9000"})
