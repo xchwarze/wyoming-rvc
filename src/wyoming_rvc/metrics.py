@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import math
 import time
-from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 
 
@@ -68,20 +67,3 @@ class Stopwatch:
 
 def now_ms() -> float:
     return time.perf_counter() * 1000.0
-
-
-def percentile(values: Sequence[float], pct: float) -> float:
-    """Linear-interpolated percentile; ``pct`` in [0, 100]."""
-    if not values:
-        return math.nan
-    ordered = sorted(values)
-    if len(ordered) == 1:
-        return float(ordered[0])
-    rank = (pct / 100.0) * (len(ordered) - 1)
-    low = math.floor(rank)
-    high = math.ceil(rank)
-    return float(ordered[low] + (ordered[high] - ordered[low]) * (rank - low))
-
-
-def median(values: Sequence[float]) -> float:
-    return percentile(values, 50.0)

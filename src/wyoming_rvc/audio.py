@@ -95,8 +95,3 @@ def iter_pcm_chunks(pcm: bytes, samples_per_chunk: int, width: int = 2, channels
     step = samples_per_chunk * width * channels
     for offset in range(0, len(pcm), step):
         yield pcm[offset : offset + step]
-
-
-def duration_ms(num_samples: int, sample_rate: int) -> float:
-    """Duration of ``num_samples`` at ``sample_rate`` in milliseconds."""
-    return 1000.0 * num_samples / sample_rate
