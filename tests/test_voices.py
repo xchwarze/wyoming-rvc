@@ -213,6 +213,28 @@ async def test_failed_load_is_retried_next_time():
         assert lease.engine is reg.engines["teto"]
 
 
+async def test_cancelled_load_keeps_the_model():
+    reg = Registry(load_delay=0.2)
+    m = manager(reg)
+
+    async def use():
+        async with m.acquire("teto"):
+            pass
+
+    task = asyncio.create_task(use())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert m.is_loaded("teto")  # the load finished and was kept
+    async with m.acquire("teto") as lease:
+        assert lease.load_ms == 0
+    assert reg.loads == ["teto"]  # loaded once, nothing orphaned
+    async with asyncio.timeout(2), m.acquire("miku"):  # teto is idle, so it can be evicted
+        pass
+    assert reg.engines["teto"].unloaded
+
+
 async def test_preload_and_unload():
     reg = Registry()
     m = manager(reg, ("teto", "miku", "yui"), max_loaded=1, preload=("teto", "miku"))

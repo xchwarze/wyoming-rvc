@@ -331,16 +331,28 @@ class VoiceManager:
                 await asyncio.to_thread(engine.unload)
             if must_load:
                 start = now_ms()
-                engine = await asyncio.to_thread(self._load, state.config, state.files)
-                load_ms = now_ms() - start
-                async with self._cond:
-                    slot.engine, slot.ready, slot.last_load_ms = engine, True, load_ms
-                    self._cond.notify_all()
-                _LOGGER.info("Voice %s loaded in %.0f ms", vid, load_ms)
+                # A cancelled request cannot stop the loading thread: wait for it and keep
+                # the model, so it is neither orphaned on the GPU nor loaded a second time.
+                job = asyncio.ensure_future(asyncio.to_thread(self._load, state.config, state.files))
+                try:
+                    await asyncio.shield(job)
+                finally:
+                    if not job.done():
+                        with contextlib.suppress(BaseException):
+                            await job
+                    if job.done() and not job.cancelled() and job.exception() is None:
+                        load_ms = now_ms() - start
+                        async with self._cond:
+                            slot.engine, slot.ready, slot.last_load_ms = job.result(), True, load_ms
+                            self._cond.notify_all()
+                        _LOGGER.info("Voice %s loaded in %.0f ms", vid, load_ms)
         except BaseException:
             async with self._cond:
                 if must_load and self._loaded.get(vid) is slot:
-                    del self._loaded[vid]
+                    if slot.ready:  # loaded, but this request was cancelled: release it
+                        slot.users -= 1
+                    else:
+                        del self._loaded[vid]
                 self._cond.notify_all()
             raise
 
