@@ -23,6 +23,7 @@ import numpy as np
 from .audio import float_to_pcm16, prevent_clipping, silence
 from .config import F0_METHODS, RVC_MODES, Settings
 from .metrics import Stopwatch, SynthesisMetrics, now_ms
+from .voices import VoiceConfig, VoiceManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,21 +46,24 @@ class RvcLike(Protocol):
 
 @dataclass(frozen=True)
 class SynthesisOptions:
-    pitch: int = 0
-    f0_method: str = "rmvpe"
-    index_rate: float = 0.6
-    protect: float = 0.33
+    """Request options. ``None`` RVC parameters fall back to the selected voice's settings."""
+
+    voice: str | None = None
+    pitch: int | None = None
+    f0_method: str | None = None
+    index_rate: float | None = None
+    protect: float | None = None
     mode: str = "sentence"
     rvc: bool = True
 
     def validate(self) -> SynthesisOptions:
-        if not -24 <= self.pitch <= 24:
+        if self.pitch is not None and not -24 <= self.pitch <= 24:
             raise ValueError("pitch must be within [-24, 24]")
-        if self.f0_method not in F0_METHODS:
+        if self.f0_method is not None and self.f0_method not in F0_METHODS:
             raise ValueError(f"f0_method must be one of {', '.join(F0_METHODS)}")
-        if not 0.0 <= self.index_rate <= 1.0:
+        if self.index_rate is not None and not 0.0 <= self.index_rate <= 1.0:
             raise ValueError("index_rate must be within [0, 1]")
-        if not 0.0 <= self.protect <= 0.5:
+        if self.protect is not None and not 0.0 <= self.protect <= 0.5:
             raise ValueError("protect must be within [0, 0.5]")
         if self.mode not in RVC_MODES:
             raise ValueError(f"mode must be one of {', '.join(RVC_MODES)}")
@@ -67,13 +71,15 @@ class SynthesisOptions:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> SynthesisOptions:
-        return cls(
-            pitch=settings.rvc_pitch,
-            f0_method=settings.rvc_f0_method,
-            index_rate=settings.rvc_index_rate,
-            protect=settings.rvc_protect,
-            mode=settings.rvc_mode,
-            rvc=settings.rvc_enabled,
+        return cls(mode=settings.rvc_mode, rvc=settings.rvc_enabled)
+
+    def rvc_params(self, voice: VoiceConfig) -> tuple[int, str, float, float]:
+        """(pitch, f0_method, index_rate, protect): request overrides, else the voice's."""
+        return (
+            voice.pitch if self.pitch is None else self.pitch,
+            voice.f0_method if self.f0_method is None else self.f0_method,
+            voice.index_rate if self.index_rate is None else self.index_rate,
+            voice.protect if self.protect is None else self.protect,
         )
 
 
@@ -120,13 +126,14 @@ class TtsPipeline:
     def __init__(
         self,
         source: SourceLike,
-        rvc: RvcLike | None,
+        rvc: VoiceManager | RvcLike | None,
         defaults: SynthesisOptions,
         rvc_concurrency: int = 1,
         sentence_silence_ms: int = 0,
     ) -> None:
         self.source = source
-        self.rvc = rvc
+        # A bare engine is served as a single voice.
+        self.voices = rvc if (rvc is None or isinstance(rvc, VoiceManager)) else VoiceManager.single(rvc)
         self.defaults = defaults.validate()
         self.sentence_silence_ms = sentence_silence_ms
         self._rvc_slots = asyncio.Semaphore(rvc_concurrency)
@@ -135,14 +142,16 @@ class TtsPipeline:
         """Defaults with non-None overrides applied, validated."""
         values = {k: v for k, v in overrides.items() if v is not None}
         opts = replace(self.defaults, **values).validate()
-        if opts.rvc and self.rvc is None:
-            raise ValueError("RVC is disabled on this server")
+        if opts.rvc:
+            if self.voices is None:
+                raise ValueError("RVC is disabled on this server")
+            self.voices.resolve(opts.voice)  # UnknownVoiceError (a ValueError) if not servable
         return opts
 
     def sample_rate(self, options: SynthesisOptions) -> int:
         """Output sample rate for a request with these options."""
-        if options.rvc and self.rvc is not None:
-            return self.rvc.output_sample_rate
+        if options.rvc and self.voices is not None:
+            return int(self.voices.resolve(options.voice).sample_rate)
         return self.source.sample_rate
 
     async def synthesize(self, text: str, options: SynthesisOptions | None = None) -> SynthesisResult:
@@ -159,7 +168,7 @@ class TtsPipeline:
         options = options or self.defaults
         metrics = metrics if metrics is not None else SynthesisMetrics()
         start = now_ms()
-        use_rvc = options.rvc and self.rvc is not None
+        use_rvc = options.rvc and self.voices is not None
         whole = use_rvc and options.mode == "whole"
         out_rate = self.sample_rate(options)
         in_rate = self.source.sample_rate
@@ -187,21 +196,27 @@ class TtsPipeline:
                 async for audio in sentences:
                     mark_first()
                     yield encode(prevent_clipping(audio))
-            elif whole:
-                parts = [audio async for audio in sentences]
-                if parts:
-                    converted = await self._rvc_call(
-                        lambda: self._convert(np.concatenate(parts), in_rate, options), rvc_sw, metrics
-                    )
-                    mark_first()
-                    yield encode(converted)
-            else:  # sentence
-                async for audio in sentences:
-                    converted = await self._rvc_call(
-                        lambda a=audio: self._convert(a, in_rate, options), rvc_sw, metrics
-                    )
-                    mark_first()
-                    yield encode(converted)
+            else:
+                assert self.voices is not None
+                async with self.voices.acquire(options.voice) as lease:
+                    metrics.voice, metrics.rvc_load_ms = lease.voice.id, lease.load_ms
+                    params = options.rvc_params(lease.voice)
+                    engine = lease.engine
+                    if whole:
+                        parts = [audio async for audio in sentences]
+                        if parts:
+                            converted = await self._rvc_call(
+                                lambda: _convert(engine, np.concatenate(parts), in_rate, params), rvc_sw, metrics
+                            )
+                            mark_first()
+                            yield encode(converted)
+                    else:  # sentence
+                        async for audio in sentences:
+                            converted = await self._rvc_call(
+                                lambda a=audio: _convert(engine, a, in_rate, params), rvc_sw, metrics
+                            )
+                            mark_first()
+                            yield encode(converted)
         finally:
             await sentences.aclose()
             metrics.source_ms = source_sw.elapsed_ms
@@ -223,13 +238,6 @@ class TtsPipeline:
                     audio = np.concatenate([gap, audio])
                 yield audio
 
-    def _convert(self, audio: np.ndarray, rate: int, options: SynthesisOptions) -> np.ndarray:
-        assert self.rvc is not None
-        converted, _ = self.rvc.convert(
-            audio, rate, options.pitch, options.f0_method, options.index_rate, options.protect
-        )
-        return converted
-
     async def _rvc_call(self, fn: Callable[[], np.ndarray], sw: Stopwatch, metrics: SynthesisMetrics) -> np.ndarray:
         queued = now_ms()
         async with self._rvc_slots:
@@ -248,12 +256,18 @@ class TtsPipeline:
                     with contextlib.suppress(BaseException):
                         await job
 
-    async def warmup(self, text: str) -> float:
+    async def warmup(self, text: str, voice: str | None = None) -> float:
         """Exercise every code path once so kernels and allocators are ready."""
         start = now_ms()
-        modes = ["whole", "sentence"] if self.rvc is not None and self.defaults.rvc else [self.defaults.mode]
+        modes = ["whole", "sentence"] if self.voices is not None and self.defaults.rvc else [self.defaults.mode]
         for mode in modes:
-            result = await self.synthesize(text, replace(self.defaults, mode=mode))
+            result = await self.synthesize(text, replace(self.defaults, mode=mode, voice=voice))
             if not result.pcm:
                 raise RuntimeError(f"Warmup produced no audio (mode={mode})")
         return now_ms() - start
+
+
+def _convert(engine: RvcLike, audio: np.ndarray, rate: int, params: tuple[int, str, float, float]) -> np.ndarray:
+    pitch, f0_method, index_rate, protect = params
+    converted, _ = engine.convert(audio, rate, pitch, f0_method, index_rate, protect)
+    return converted

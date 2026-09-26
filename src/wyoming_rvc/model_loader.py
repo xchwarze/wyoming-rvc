@@ -103,35 +103,52 @@ def resolve_piper(settings: Settings) -> PiperFiles:
 
 
 def resolve_rvc(settings: Settings) -> RvcFiles:
-    """Resolve the RVC ``.pth`` and optional ``.index`` from local paths or a HF repo."""
-    model_hint, index_hint = settings.rvc_model_file, settings.rvc_index_file
+    """Resolve the single RVC voice configured through RVC_* environment variables."""
+    return resolve_rvc_files(
+        settings.rvc_repo_id,
+        settings.rvc_revision,
+        settings.rvc_model_file,
+        settings.rvc_index_file,
+        settings.rvc_data_dir,
+    )
 
-    if model_hint and Path(model_hint).is_absolute():
-        model = Path(model_hint)
-        _require_file(model, "RVC_MODEL_FILE")
+
+def resolve_rvc_files(
+    repo_id: str,
+    revision: str | None,
+    model_file: str | None,
+    index_file: str | None,
+    data_dir: Path,
+    label: str = "RVC",
+) -> RvcFiles:
+    """Resolve an RVC ``.pth`` and optional ``.index`` from local paths or a HF repo."""
+    model_env, index_env = f"{label} model_file (RVC_MODEL_FILE)", f"{label} index_file (RVC_INDEX_FILE)"
+    if model_file and Path(model_file).is_absolute():
+        model = Path(model_file)
+        _require_file(model, model_env)
         index = None
-        if index_hint:
-            index = Path(index_hint)
+        if index_file:
+            index = Path(index_file)
             if not index.is_absolute():
-                raise ModelResolutionError("RVC_INDEX_FILE must be absolute when RVC_MODEL_FILE is absolute")
-            _require_file(index, "RVC_INDEX_FILE")
+                raise ModelResolutionError(f"{index_env} must be absolute when the model path is absolute")
+            _require_file(index, index_env)
         return RvcFiles(model=model, index=index, source=str(model.parent))
 
-    snapshot = _snapshot(settings.rvc_repo_id, settings.rvc_revision)
-    roots = [snapshot] + _extract_archives(snapshot, settings.rvc_data_dir / settings.rvc_repo_id.replace("/", "__"))
+    snapshot = _snapshot(repo_id, revision)
+    roots = [snapshot] + _extract_archives(snapshot, data_dir / repo_id.replace("/", "__"))
     pth = _collect(roots, ".pth")
     indexes = _collect(roots, ".index")
     _LOGGER.info(
         "RVC candidates in %s: models=%s indexes=%s",
-        settings.rvc_repo_id,
-        [str(p) for p in pth],
-        [str(p) for p in indexes],
+        repo_id,
+        [str(c) for c in pth],
+        [str(c) for c in indexes],
     )
 
-    model = _pick(pth, model_hint, "RVC_MODEL_FILE", ".pth", required=True)
+    model = _pick(pth, model_file, "RVC_MODEL_FILE", ".pth", required=True)
     assert model is not None
-    index = _pick(indexes, index_hint, "RVC_INDEX_FILE", ".index", required=False)
-    return RvcFiles(model=model.path, index=index.path if index else None, source=settings.rvc_repo_id)
+    index = _pick(indexes, index_file, "RVC_INDEX_FILE", ".index", required=False)
+    return RvcFiles(model=model.path, index=index.path if index else None, source=repo_id)
 
 
 @dataclass(frozen=True)

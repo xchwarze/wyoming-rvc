@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from types import SimpleNamespace
 from typing import Any
 
 from . import __version__
@@ -142,8 +143,7 @@ class Service:
         self.torch_facts: dict[str, Any] = {}
         self.source = None
         self.source_name = ""
-        self.rvc = None
-        self.rvc_source = ""
+        self.voices = None  # VoiceManager when RVC is enabled
         self.warmup_ms: float | None = None
         self.wyoming = None
         self.http: UvicornServer | None = None
@@ -152,8 +152,15 @@ class Service:
 
     def info(self) -> dict[str, Any]:
         s = self.settings
-        rvc_info = self.rvc.info.__dict__ if self.rvc is not None and self.rvc.info else None
         loaded = self.source is not None and self.state.stage not in ("starting", "loading-source")
+        rvc = None
+        if s.rvc_enabled and self.voices is not None:
+            rvc = {
+                "default_voice": self.voices.default_voice,
+                "max_loaded_models": self.voices.max_loaded,
+                "voices": self.voices.list_voices(),
+                "loaded": {vid: e.info.__dict__ for vid, e in self.voices.loaded_engines().items() if e.info},
+            }
         return {
             "version": __version__,
             "platform": self.torch_facts,
@@ -163,22 +170,25 @@ class Service:
                 "sample_rate": self.source.sample_rate if loaded else None,
                 "device": self.source.device if self.source is not None else None,
             },
-            "rvc": {"source": self.rvc_source, **(rvc_info or {})} if s.rvc_enabled else None,
+            "rvc": rvc,
             "defaults": self.state.pipeline.defaults.__dict__ if self.state.pipeline else None,
-            "wyoming": {
-                "port": s.wyoming_port,
-                "program": s.program_name,
-                "voice": s.voice_name,
-                "language": s.voice_language,
-                "streaming": s.wyoming_streaming,
-            },
+            "wyoming": {"port": s.wyoming_port, "program": s.program_name, "streaming": s.wyoming_streaming},
             "warmup_ms": self.warmup_ms,
-            "gpu_memory": self.rvc.memory_stats() if self.rvc is not None else {},
+            "gpu_memory": self._gpu_memory(),
         }
 
+    def _gpu_memory(self) -> dict[str, float]:
+        if not self.settings.rvc_enabled or self.voices is None:
+            return {}
+        from .rvc_engine import gpu_memory_stats
+
+        return gpu_memory_stats()
+
     def _reset_peak(self) -> None:
-        if self.rvc is not None:
-            self.rvc.reset_peak_memory()
+        if self.voices is not None:
+            from .rvc_engine import reset_gpu_peak
+
+            reset_gpu_peak()
 
     def load_source(self) -> None:
         s = self.settings
@@ -214,8 +224,9 @@ class Service:
         _LOGGER.info("Piper ready: %s (%d Hz, %s)", piper_files.voice, piper.sample_rate, piper.device)
 
     def load_models(self) -> None:
-        """Blocking: resolve/download and load every model once."""
-        from .model_loader import resolve_rvc, resolve_rvc_assets
+        """Blocking: load the source and shared RVC models, provision every voice."""
+        from .model_loader import resolve_rvc_assets, resolve_rvc_files
+        from .voices import VoiceManager, load_voice_configs
 
         s = self.settings
         self.load_source()
@@ -223,29 +234,42 @@ class Service:
             _LOGGER.warning("RVC_ENABLED=false: serving the TTS source unchanged")
             return
 
-        from .rvc_engine import RvcEngine
+        from .rvc_engine import RvcEngine, SharedModels, checkpoint_sample_rate
 
         self.state.stage = "loading-rvc"
-        _LOGGER.info("Loading RVC...")
-        rvc_files = resolve_rvc(s)
-        _LOGGER.info("RVC model: %s", rvc_files.model)
-        _LOGGER.info("RVC index: %s", rvc_files.index or "none")
-        assets = resolve_rvc_assets(s)
-        _LOGGER.info("Loading RMVPE / ContentVec...")
-        self.rvc = RvcEngine(device=s.device)
-        info = self.rvc.load(rvc_files, assets)
-        self.rvc_source = rvc_files.source
-        _LOGGER.info(
-            "RVC ready: name=%s version=%s sr=%d f0=%s vocoder=%s epoch=%s device=%s",
-            info.model_name,
-            info.version,
-            info.sample_rate,
-            info.f0,
-            info.vocoder,
-            info.epoch,
-            info.device,
-            extra={"fields": info.__dict__},
-        )
+        configs, default_voice = load_voice_configs(s)
+        _LOGGER.info("Voices configured: %s (default %s)", [c.id for c in configs if c.enabled], default_voice)
+        _LOGGER.info("Loading RMVPE / ContentVec (shared by all voices)...")
+        shared = SharedModels(s.device, resolve_rvc_assets(s))
+
+        def provision(voice):
+            files = resolve_rvc_files(
+                voice.repo_id, voice.revision, voice.model_file, voice.index_file, s.rvc_data_dir, f"voice {voice.id}"
+            )
+            _LOGGER.info("Voice %s: model=%s index=%s", voice.id, files.model, files.index or "none")
+            return files, checkpoint_sample_rate(files.model)
+
+        def load(voice, files):
+            engine = RvcEngine(shared)
+            info = engine.load(files)
+            _LOGGER.info(
+                "RVC voice %s ready: model=%s version=%s sr=%d f0=%s vocoder=%s epoch=%s device=%s",
+                voice.id,
+                info.model_name,
+                info.version,
+                info.sample_rate,
+                info.f0,
+                info.vocoder,
+                info.epoch,
+                info.device,
+                extra={"fields": {"voice": voice.id, **info.__dict__}},
+            )
+            return engine
+
+        manager = VoiceManager(configs, default_voice, provision, load, s.rvc_max_loaded_models)
+        manager.provision_all()
+        manager.resolve(default_voice)  # the default voice must be usable: fail fast otherwise
+        self.voices = manager
 
     async def run(self) -> None:
         s = self.settings
@@ -275,7 +299,7 @@ class Service:
 
             pipeline = TtsPipeline(
                 source=self.source,
-                rvc=self.rvc,
+                rvc=self.voices,
                 defaults=SynthesisOptions.from_settings(s),
                 rvc_concurrency=s.rvc_concurrency,
                 sentence_silence_ms=s.sentence_silence_ms,
@@ -283,15 +307,21 @@ class Service:
             self.state.pipeline = pipeline
             self.state.stage = "warmup"
             _LOGGER.info("Running warmup...")
-            self.warmup_ms = await pipeline.warmup(s.warmup_text)
-            _LOGGER.info("Warmup completed in %.0f ms", self.warmup_ms)
-            if self.rvc is not None:
-                self.rvc.reset_peak_memory()
+            started = now_ms()
+            preloaded = await self.voices.preload() if self.voices is not None else []
+            for voice in preloaded:  # warm every resident voice
+                await pipeline.warmup(s.warmup_text, voice)
+            if not preloaded:  # no resident RVC voice: at least warm the TTS source
+                await pipeline.synthesize(s.warmup_text, pipeline.options(rvc=False))
+            self.warmup_ms = now_ms() - started
+            _LOGGER.info("Warmup completed in %.0f ms (preloaded voices: %s)", self.warmup_ms, preloaded or "none")
+            self._reset_peak()
 
-            description = (
-                f"{s.voice_name} (RVC {self.rvc.info.model_name})" if self.rvc and self.rvc.info else self.source_name
-            )
-            info = build_info(s, description)
+            if self.voices is not None:
+                advertised = self.voices.installed_voices()
+            else:
+                advertised = [SimpleNamespace(id=s.voice_name, name=self.source_name, language=s.voice_language)]
+            info = build_info(s, advertised)
             self.wyoming = WyomingService(s, self.state, lambda: info)
             await self.wyoming.start()
 

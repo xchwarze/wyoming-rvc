@@ -16,3 +16,5 @@ faiss-cpu==1.14.3
 # CUDA 12.8 build: supports Turing..Blackwell (sm_75..sm_120), driver >= 570.
 torch==2.11.0+cu128
 transformers==5.13.1
+# voices.yaml
+pyyaml==6.0.3

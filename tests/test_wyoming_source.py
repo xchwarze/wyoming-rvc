@@ -2,6 +2,7 @@
 
 import asyncio
 import socket
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -29,7 +30,7 @@ async def upstream():
     )
     pipeline = TtsPipeline(FakePiper(), None, SynthesisOptions(rvc=False))
     state = ServiceState(pipeline=pipeline, ready=True, stage="ready")
-    info = build_info(settings, "Fake Piper")
+    info = build_info(settings, [SimpleNamespace(id="daniela", name="Fake Piper", language="es")])
     service = WyomingService(settings, state, lambda: info)
     await service.start()
     yield port

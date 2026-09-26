@@ -91,7 +91,7 @@ async def test_abandoned_stream_releases_slot(piper):
 
 def test_options_validation(pipeline):
     assert pipeline.options(pitch=3).pitch == 3
-    assert pipeline.options(pitch=None).pitch == 0
+    assert pipeline.options(pitch=None).pitch is None  # None = use the voice's own setting
     for bad in ({"pitch": 30}, {"index_rate": 2.0}, {"protect": -1.0}, {"mode": "x"}, {"f0_method": "crepe"}):
         with pytest.raises(ValueError):
             pipeline.options(**bad)

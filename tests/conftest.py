@@ -42,9 +42,12 @@ class FakePiper:
 class FakeRvc:
     output_sample_rate = 32000
 
-    def __init__(self, delay: float = 0.02, fail: bool = False) -> None:
+    def __init__(self, delay: float = 0.02, fail: bool = False, sample_rate: int = 32000) -> None:
         self.delay = delay
         self.fail = fail
+        self.output_sample_rate = sample_rate
+        self.unloaded = False
+        self.pitches: list[int] = []
         self.active = 0
         self.max_active = 0
         self.calls = 0
@@ -62,7 +65,11 @@ class FakeRvc:
             self.active -= 1
             self.finished.append(time.perf_counter())
 
+    def unload(self) -> None:
+        self.unloaded = True
+
     def convert(self, audio, sample_rate, pitch, f0_method, index_rate, protect):
+        self.pitches.append(pitch)
         self._enter()
         try:
             time.sleep(self.delay)

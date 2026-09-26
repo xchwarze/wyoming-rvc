@@ -65,6 +65,9 @@ class Settings:
     rvc_protect: float = 0.33
     rvc_mode: str = "sentence"
     rvc_concurrency: int = 1
+    rvc_max_loaded_models: int = 1
+    voices_file: Path | None = None
+    default_voice: str | None = None
 
     warmup_text: str = "System ready."
     max_text_chars: int = 5000
@@ -127,6 +130,9 @@ class Settings:
             rvc_protect=r.float("RVC_PROTECT", 0.33, lo=0.0, hi=0.5),
             rvc_mode=r.choice("RVC_MODE", "sentence", RVC_MODES),
             rvc_concurrency=r.int("RVC_CONCURRENCY", 1, lo=1, hi=8),
+            rvc_max_loaded_models=r.int("RVC_MAX_LOADED_MODELS", 1, lo=1, hi=16),
+            voices_file=r.opt_path("VOICES_FILE"),
+            default_voice=r.opt_str("DEFAULT_VOICE"),
             warmup_text=r.str("WARMUP_TEXT", "System ready."),
             max_text_chars=r.int("MAX_TEXT_CHARS", 5000, lo=1, hi=100000),
             source=r.choice("SOURCE", "piper", SOURCES),

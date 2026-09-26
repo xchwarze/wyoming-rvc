@@ -15,8 +15,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from functools import partial
+from typing import Any
 
 from sentence_stream import SentenceBoundaryDetector
 from wyoming.audio import AudioChunk, AudioStart, AudioStop
@@ -37,24 +38,30 @@ _LOGGER = logging.getLogger(__name__)
 WIDTH, CHANNELS = 2, 1
 
 
-def build_info(settings: Settings, voice_description: str) -> Info:
-    """Wyoming ``info`` advertising one installed TTS program with one voice."""
+def build_info(settings: Settings, voices: Iterable[Any]) -> Info:
+    """Wyoming ``info``: one TTS program listing every installed voice.
+
+    ``voices`` are objects with ``id``, ``name`` and ``language`` (``VoiceConfig``).
+    """
     attribution = Attribution(name="wyoming-rvc", url=PROJECT_URL)
-    voice = TtsVoice(
-        name=settings.voice_name,
-        description=voice_description,
-        attribution=attribution,
-        installed=True,
-        version=None,
-        languages=[settings.voice_language],
-    )
+    tts_voices = [
+        TtsVoice(
+            name=voice.id,
+            description=voice.name,
+            attribution=attribution,
+            installed=True,
+            version=None,
+            languages=[voice.language],
+        )
+        for voice in voices
+    ]
     program = TtsProgram(
         name=settings.program_name,
         description="Piper TTS + RVC voice conversion",
         attribution=attribution,
         installed=True,
         version=__version__,
-        voices=[voice],
+        voices=tts_voices,
         supports_synthesize_streaming=settings.wyoming_streaming,
     )
     return Info(tts=[program])
@@ -76,6 +83,7 @@ class RvcEventHandler(AsyncEventHandler):
         self._state = state
         self._settings = settings
         self._streaming = False
+        self._stream_voice: str | None = None
         self._sbd = SentenceBoundaryDetector()
 
     async def handle_event(self, event: Event) -> bool:
@@ -88,8 +96,7 @@ class RvcEventHandler(AsyncEventHandler):
                 if self._streaming:
                     return True  # compatibility copy of the streamed text
                 synthesize = Synthesize.from_event(event)
-                self._check_voice(synthesize.voice)
-                await self._speak(synthesize.text, source="wyoming")
+                await self._speak(synthesize.text, "wyoming", _voice_id(synthesize.voice))
                 return True
 
             if not self._settings.wyoming_streaming:
@@ -97,20 +104,21 @@ class RvcEventHandler(AsyncEventHandler):
 
             if SynthesizeStart.is_type(event.type):
                 start = SynthesizeStart.from_event(event)
-                self._check_voice(start.voice)
+                self._stream_voice = _voice_id(start.voice)
+                self._pipeline().options(voice=self._stream_voice)  # unknown voice -> error now
                 self._streaming = True
                 self._sbd = SentenceBoundaryDetector()
                 return True
 
             if SynthesizeChunk.is_type(event.type) and self._streaming:
                 for sentence in self._sbd.add_chunk(SynthesizeChunk.from_event(event).text):
-                    await self._speak(sentence, source="wyoming-stream")
+                    await self._speak(sentence, "wyoming-stream", self._stream_voice)
                 return True
 
             if SynthesizeStop.is_type(event.type) and self._streaming:
                 remaining = self._sbd.finish()
                 if remaining.strip():
-                    await self._speak(remaining, source="wyoming-stream")
+                    await self._speak(remaining, "wyoming-stream", self._stream_voice)
                 await self.write_event(SynthesizeStopped().event())
                 self._streaming = False
                 return True
@@ -125,17 +133,17 @@ class RvcEventHandler(AsyncEventHandler):
 
         return True
 
-    def _check_voice(self, voice) -> None:
-        if voice is not None and voice.name and voice.name != self._settings.voice_name:
-            _LOGGER.warning("Unknown voice %r requested; using %r", voice.name, self._settings.voice_name)
-
-    async def _speak(self, raw_text: str, source: str) -> None:
-        """Synthesize one utterance and send audio-start / chunks / audio-stop."""
+    def _pipeline(self):
         pipeline = self._state.pipeline
         if not self._state.ready or pipeline is None:
             raise RuntimeError(f"Service not ready (stage={self._state.stage})")
+        return pipeline
+
+    async def _speak(self, raw_text: str, source: str, voice: str | None) -> None:
+        """Synthesize one utterance and send audio-start / chunks / audio-stop."""
+        pipeline = self._pipeline()
         text = " ".join(raw_text.split())
-        options = pipeline.defaults
+        options = pipeline.options(voice=voice)  # UnknownVoiceError -> Wyoming error event
         rate = pipeline.sample_rate(options)
 
         await self.write_event(AudioStart(rate=rate, width=WIDTH, channels=CHANNELS).event())
@@ -179,3 +187,8 @@ class WyomingService:
             # wyoming.zeroconf has no public close(); tolerate the private attribute changing.
             with contextlib.suppress(AttributeError):
                 await self._zeroconf._aiozc.async_close()
+
+
+def _voice_id(voice: Any) -> str | None:
+    """Requested voice name; ``None`` means the default voice (language-only requests too)."""
+    return voice.name if voice is not None and voice.name else None

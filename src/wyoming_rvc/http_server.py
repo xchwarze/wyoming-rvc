@@ -38,6 +38,7 @@ class TtsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: str = Field(min_length=1)
+    voice: str | None = Field(default=None, max_length=64)
     pitch: int | None = Field(default=None, ge=-24, le=24)
     index_rate: float | None = Field(default=None, ge=0.0, le=1.0)
     protect: float | None = Field(default=None, ge=0.0, le=0.5)
@@ -61,6 +62,11 @@ def create_app(state: ServiceState) -> FastAPI:
     @app.get("/info")
     async def info() -> dict[str, Any]:
         return {"ready": state.ready, "stage": state.stage, **state.info()}
+
+    @app.get("/v1/voices")
+    async def voices() -> dict[str, Any]:
+        manager = state.pipeline.voices if state.pipeline is not None else None
+        return {"voices": manager.list_voices() if manager is not None else []}
 
     @app.post("/v1/metrics/reset")
     async def reset_metrics() -> dict[str, str]:
@@ -143,6 +149,7 @@ def _prepare(state: ServiceState, body: TtsRequest) -> tuple[TtsPipeline, str, S
         raise HTTPException(status_code=413, detail=f"text longer than {state.max_text_chars} characters")
     try:
         options = state.pipeline.options(
+            voice=body.voice,
             pitch=body.pitch,
             index_rate=body.index_rate,
             protect=body.protect,

@@ -15,7 +15,9 @@ class SynthesisMetrics:
     text_chars: int = 0
     sentences: int = 0
     mode: str = ""
+    voice: str = ""
     rvc: bool = True
+    rvc_load_ms: float = 0.0
     source_ms: float = 0.0
     rvc_ms: float = 0.0
     encode_ms: float = 0.0
@@ -35,7 +37,16 @@ class SynthesisMetrics:
     def as_dict(self) -> dict[str, float | int | str | bool | None]:
         data = asdict(self)
         data["rtf"] = round(self.rtf, 4) if math.isfinite(self.rtf) else None
-        for key in ("source_ms", "rvc_ms", "encode_ms", "queue_ms", "total_ms", "audio_duration_ms", "ttfa_ms"):
+        for key in (
+            "source_ms",
+            "rvc_ms",
+            "rvc_load_ms",
+            "encode_ms",
+            "queue_ms",
+            "total_ms",
+            "audio_duration_ms",
+            "ttfa_ms",
+        ):
             if data[key] is not None:
                 data[key] = round(data[key], 1)
         return data

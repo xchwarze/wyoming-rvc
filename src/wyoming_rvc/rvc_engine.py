@@ -1,9 +1,10 @@
 """Resident RVC voice conversion engine.
 
 The conversion math follows Applio's ``rvc/infer/pipeline.py`` (MIT, see
-``vendor/applio/LICENSE``) but every model is loaded exactly once:
-ContentVec, RMVPE, the generator and the index vectors (kept on the device for
-exact k-NN retrieval). Applio re-creates RMVPE and re-reads the index per call.
+``vendor/applio/LICENSE``) but models stay resident: ``SharedModels`` (ContentVec, RMVPE) is loaded once per
+process and shared by every voice; each ``RvcEngine`` holds one voice's generator and
+index vectors (kept on the device for exact k-NN retrieval) and can be unloaded to free
+VRAM. Applio re-creates RMVPE and re-reads the index per call.
 """
 
 from __future__ import annotations
@@ -48,15 +49,82 @@ class RvcModelInfo:
     device: str
 
 
+def _cuda_device(device: str) -> str:
+    return "cuda:0" if device == "cuda" else device
+
+
+class SharedModels:
+    """ContentVec, RMVPE and the input filter: loaded once, used by every voice."""
+
+    def __init__(self, device: str, assets: RvcAssets) -> None:
+        import torch
+        from scipy import signal
+
+        self.device = _cuda_device(device)
+        if self.device.startswith("cuda"):
+            # PyTorch's default, pinned explicitly: TF32 would perturb the retrieval
+            # distances, which are weighted by 1/d^2 (nearest neighbours dominate).
+            torch.backends.cuda.matmul.allow_tf32 = False
+            torch.backends.cudnn.benchmark = False  # input lengths vary per request
+        # Same 48 Hz high-pass Applio applies to the 16 kHz input.
+        self.highpass = signal.butter(N=5, Wn=48, btype="high", fs=INPUT_SR)
+        _LOGGER.info("Loading ContentVec from %s", assets.contentvec_dir)
+        self.hubert = self._load_hubert(assets.contentvec_dir)
+        _LOGGER.info("Loading RMVPE from %s", assets.rmvpe)
+        from .vendor.applio.predictors.rmvpe import RMVPE0Predictor
+
+        self.rmvpe = RMVPE0Predictor(str(assets.rmvpe), device=self.device)
+
+    def _load_hubert(self, contentvec_dir: Path):
+        from torch import nn
+        from transformers import HubertModel
+
+        class HubertModelWithFinalProj(HubertModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.final_proj = nn.Linear(config.hidden_size, config.classifier_proj_size)
+
+        try:
+            model = HubertModelWithFinalProj.from_pretrained(str(contentvec_dir))
+        except Exception as err:
+            raise RvcLoadError(f"Could not load ContentVec from {contentvec_dir}: {err}") from err
+        return model.to(self.device).float().eval()
+
+
+def load_checkpoint(path: Path) -> dict:
+    """Read an RVC inference checkpoint (CPU) and validate it can be served."""
+    import torch
+
+    try:
+        ckpt = torch.load(path, map_location="cpu", weights_only=True)
+    except Exception as err:
+        raise RvcLoadError(f"Could not read RVC checkpoint {path}: {err}") from err
+    if not isinstance(ckpt, dict) or "weight" not in ckpt or "config" not in ckpt:
+        raise RvcLoadError(f"{path} is not an RVC inference checkpoint (missing 'weight'/'config')")
+    embedder = str(ckpt.get("embedder_model", "contentvec"))
+    if embedder != "contentvec":
+        raise RvcLoadError(f"{path.name} was trained with embedder {embedder}; only contentvec is supported")
+    version = str(ckpt.get("version", "v1"))
+    if version not in ("v1", "v2"):
+        raise RvcLoadError(f"{path.name}: unsupported RVC version {version}")
+    return ckpt
+
+
+def checkpoint_sample_rate(path: Path) -> int:
+    """Output sample rate of a checkpoint (validates it too), without building the model."""
+    return int(load_checkpoint(path)["config"][-1])
+
+
 class RvcEngine:
-    """Load once with ``load()``, then call ``convert()``.
+    """One voice: ``load()`` its generator and index, ``convert()``, ``unload()``.
 
     Not internally locked: inference is reentrant, and ``TtsPipeline`` bounds concurrent
     calls with ``RVC_CONCURRENCY`` (default 1).
     """
 
-    def __init__(self, device: str = "cuda", x_pad: int = 1, x_query: int = 6, x_center: int = 38, x_max: int = 41):
-        self.device = "cuda:0" if device == "cuda" else device
+    def __init__(self, shared: SharedModels, x_pad: int = 1, x_query: int = 6, x_center: int = 38, x_max: int = 41):
+        self.shared = shared
+        self.device = shared.device
         # Applio's defaults for >=6 GB GPUs: 1 s reflection padding, split audio
         # longer than 41 s at the quietest point near every 38 s.
         self.t_pad = INPUT_SR * x_pad
@@ -65,50 +133,22 @@ class RvcEngine:
         self.t_max = INPUT_SR * x_max
         self.info: RvcModelInfo | None = None
         self._net_g = None
-        self._hubert = None
-        self._rmvpe = None
         self._bank = None  # retrieval feature matrix (torch, on device)
         self._bank_sq = None  # its squared norms
         self._version = "v2"
         self._use_f0 = True
         self._tgt_sr = 0
         self._sid = None
-        self._highpass: tuple[np.ndarray, np.ndarray] | None = None
 
     # ------------------------------------------------------------------ loading
 
-    def load(self, files: RvcFiles, assets: RvcAssets) -> RvcModelInfo:
+    def load(self, files: RvcFiles) -> RvcModelInfo:
         import torch
-        from scipy import signal
 
-        if self.device.startswith("cuda"):
-            # PyTorch's default, pinned explicitly: TF32 would perturb the retrieval
-            # distances, which are weighted by 1/d^2 (nearest neighbours dominate).
-            torch.backends.cuda.matmul.allow_tf32 = False
-            torch.backends.cudnn.benchmark = False  # input lengths vary per request
-
-        # Same 48 Hz high-pass Applio applies to the 16 kHz input.
-        self._highpass = signal.butter(N=5, Wn=48, btype="high", fs=INPUT_SR)
-
-        ckpt = self._load_checkpoint(files.model)
+        ckpt = load_checkpoint(files.model)
         self._build_generator(ckpt)
-        embedder = str(ckpt.get("embedder_model", "contentvec"))
-        if embedder != "contentvec":
-            raise RvcLoadError(f"Model was trained with embedder {embedder!r}; only 'contentvec' is supported")
-
-        _LOGGER.info("Loading ContentVec from %s", assets.contentvec_dir)
-        self._hubert = self._load_hubert(assets.contentvec_dir)
-
-        if self._use_f0:
-            _LOGGER.info("Loading RMVPE from %s", assets.rmvpe)
-            from .vendor.applio.predictors.rmvpe import RMVPE0Predictor
-
-            self._rmvpe = RMVPE0Predictor(str(assets.rmvpe), device=self.device)
-
         vectors = self._load_index(files.index) if files.index else 0
-
         self._sid = torch.tensor([0], device=self.device, dtype=torch.long)
-
         self.info = RvcModelInfo(
             model_path=str(files.model),
             index_path=str(files.index) if files.index else None,
@@ -116,7 +156,7 @@ class RvcEngine:
             version=self._version,
             sample_rate=self._tgt_sr,
             f0=self._use_f0,
-            embedder=embedder,
+            embedder=str(ckpt.get("embedder_model", "contentvec")),
             vocoder=str(ckpt.get("vocoder", "HiFi-GAN")),
             speakers=int(self._net_g.emb_g.weight.shape[0]),
             epoch=int(ckpt["epoch"]) if isinstance(ckpt.get("epoch"), (int, float)) else None,
@@ -125,17 +165,13 @@ class RvcEngine:
         )
         return self.info
 
-    @staticmethod
-    def _load_checkpoint(path: Path) -> dict:
+    def unload(self) -> None:
+        """Drop this voice's tensors so their VRAM can be reused."""
         import torch
 
-        try:
-            ckpt = torch.load(path, map_location="cpu", weights_only=True)
-        except Exception as err:
-            raise RvcLoadError(f"Could not read RVC checkpoint {path}: {err}") from err
-        if not isinstance(ckpt, dict) or "weight" not in ckpt or "config" not in ckpt:
-            raise RvcLoadError(f"{path} is not an RVC inference checkpoint (missing 'weight'/'config')")
-        return ckpt
+        self._net_g = self._bank = self._bank_sq = self._sid = None
+        if self.device.startswith("cuda") and torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def _build_generator(self, ckpt: dict) -> None:
         from torch.nn.utils import parametrize
@@ -147,8 +183,6 @@ class RvcEngine:
         self._tgt_sr = int(config[-1])
         self._use_f0 = bool(ckpt.get("f0", 1))
         self._version = str(ckpt.get("version", "v1"))
-        if self._version not in ("v1", "v2"):
-            raise RvcLoadError(f"Unsupported RVC version {self._version!r}")
         net_g = Synthesizer(
             *config,
             use_f0=self._use_f0,
@@ -165,21 +199,6 @@ class RvcEngine:
             if parametrize.is_parametrized(module, "weight"):
                 parametrize.remove_parametrizations(module, "weight", leave_parametrized=True)
         self._net_g = net_g.to(self.device).float().eval()
-
-    def _load_hubert(self, contentvec_dir: Path):
-        from torch import nn
-        from transformers import HubertModel
-
-        class HubertModelWithFinalProj(HubertModel):
-            def __init__(self, config):
-                super().__init__(config)
-                self.final_proj = nn.Linear(config.hidden_size, config.classifier_proj_size)
-
-        try:
-            model = HubertModelWithFinalProj.from_pretrained(str(contentvec_dir))
-        except Exception as err:
-            raise RvcLoadError(f"Could not load ContentVec from {contentvec_dir}: {err}") from err
-        return model.to(self.device).float().eval()
 
     def _load_index(self, path: Path) -> int:
         import faiss
@@ -249,40 +268,23 @@ class RvcEngine:
         result = prevent_clipping(np.concatenate(out).astype(np.float32), OUTPUT_CEILING)
         return result, self._tgt_sr
 
-    def memory_stats(self) -> dict[str, float]:
-        import torch
-
-        if not self.device.startswith("cuda") or not torch.cuda.is_available():
-            return {}
-        return {
-            "allocated_mb": torch.cuda.memory_allocated() / 2**20,
-            "reserved_mb": torch.cuda.memory_reserved() / 2**20,
-            "peak_allocated_mb": torch.cuda.max_memory_allocated() / 2**20,
-            "peak_reserved_mb": torch.cuda.max_memory_reserved() / 2**20,
-        }
-
-    def reset_peak_memory(self) -> None:
-        import torch
-
-        if self.device.startswith("cuda") and torch.cuda.is_available():
-            torch.cuda.reset_peak_memory_stats()
-
     # ------------------------------------------------------------------ internals
 
     def _prepare(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
         from scipy import signal
 
-        if self._net_g is None or self._highpass is None:
-            raise RuntimeError("RVC is not loaded")
+        if self._net_g is None:
+            raise RuntimeError("RVC voice is not loaded")
         x = resample(to_float32(audio), sample_rate, INPUT_SR)
         if x.size == 0:
             return x
         peak = float(np.max(np.abs(x)))
         if peak > INPUT_PEAK:
             x = x * (INPUT_PEAK / peak)
-        padlen = 3 * max(len(self._highpass[0]), len(self._highpass[1]))
+        highpass = self.shared.highpass
+        padlen = 3 * max(len(highpass[0]), len(highpass[1]))
         if x.size > padlen:
-            x = signal.filtfilt(*self._highpass, x)
+            x = signal.filtfilt(*highpass, x)
         return x.astype(np.float32)
 
     def _split_points(self, x: np.ndarray) -> list[int]:
@@ -317,7 +319,7 @@ class RvcEngine:
 
         p_len = audio_pad.size // WINDOW
         with torch.inference_mode():
-            f0 = self._rmvpe.infer_from_audio(audio_pad, thred=0.03)
+            f0 = self.shared.rmvpe.infer_from_audio(audio_pad, thred=0.03)
         f0 = f0 * pow(2, pitch / 12)
         f0_mel = 1127 * np.log(1 + f0 / 700)
         voiced = f0_mel > 0
@@ -332,9 +334,10 @@ class RvcEngine:
 
         with torch.inference_mode():
             x = torch.from_numpy(np.ascontiguousarray(segment)).float().view(1, -1).to(self.device)
-            feats = self._hubert(x)["last_hidden_state"]
+            hubert = self.shared.hubert
+            feats = hubert(x)["last_hidden_state"]
             if self._version == "v1":
-                feats = self._hubert.final_proj(feats[0]).unsqueeze(0)
+                feats = hubert.final_proj(feats[0]).unsqueeze(0)
             feats0 = feats.clone() if self._use_f0 else None
             if index_rate > 0:
                 feats = self._retrieve(feats, index_rate)
@@ -386,3 +389,24 @@ class RvcEngine:
             mixed.append((self._bank[ix] * weight.unsqueeze(-1)).sum(dim=1))
         retrieved = torch.cat(mixed).unsqueeze(0)
         return retrieved * index_rate + (1 - index_rate) * feats
+
+
+def gpu_memory_stats() -> dict[str, float]:
+    """CUDA memory counters in MB (empty on CPU)."""
+    import torch
+
+    if not torch.cuda.is_available():
+        return {}
+    return {
+        "allocated_mb": torch.cuda.memory_allocated() / 2**20,
+        "reserved_mb": torch.cuda.memory_reserved() / 2**20,
+        "peak_allocated_mb": torch.cuda.max_memory_allocated() / 2**20,
+        "peak_reserved_mb": torch.cuda.max_memory_reserved() / 2**20,
+    }
+
+
+def reset_gpu_peak() -> None:
+    import torch
+
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()

@@ -21,6 +21,7 @@ from tests.conftest import FakePiper, FakeRvc
 from wyoming_rvc.config import Settings
 from wyoming_rvc.http_server import ServiceState
 from wyoming_rvc.pipeline import SynthesisOptions, TtsPipeline
+from wyoming_rvc.voices import VoiceManager
 from wyoming_rvc.wyoming_server import WyomingService, build_info
 
 
@@ -35,9 +36,9 @@ async def server(request):
     params = getattr(request, "param", {})
     port = free_port()
     settings = Settings.from_env({"WYOMING_HOST": "127.0.0.1", "WYOMING_PORT": str(port), **params.get("env", {})})
-    rvc = params.get("rvc") or FakeRvc()
-    state = ServiceState(pipeline=TtsPipeline(FakePiper(), rvc, SynthesisOptions()), ready=True, stage="ready")
-    info = build_info(settings, "Teto (test)")
+    voices = VoiceManager.single(params.get("rvc") or FakeRvc(), "teto", "en")
+    state = ServiceState(pipeline=TtsPipeline(FakePiper(), voices, SynthesisOptions()), ready=True, stage="ready")
+    info = build_info(settings, voices.installed_voices())
     service = WyomingService(settings, state, lambda: info)
     await service.start()
     yield port
@@ -131,7 +132,7 @@ async def test_client_disconnect_mid_synthesis_releases_pipeline():
     piper, rvc = FakePiper(), FakeRvc(delay=0.05)
     pipeline = TtsPipeline(piper, rvc, SynthesisOptions(mode="sentence"))
     state = ServiceState(pipeline=pipeline, ready=True, stage="ready")
-    service = WyomingService(settings, state, lambda: build_info(settings, "x"))
+    service = WyomingService(settings, state, lambda: build_info(settings, pipeline.voices.installed_voices()))
     await service.start()
     try:
         client = AsyncTcpClient("127.0.0.1", port)
@@ -158,3 +159,55 @@ async def test_healthcheck_uses_wyoming_when_http_disabled(server, monkeypatch):
     assert await asyncio.to_thread(healthcheck.main) == 0
     monkeypatch.setenv("WYOMING_PORT", str(free_port()))
     assert await asyncio.to_thread(healthcheck.main) == 1
+
+
+@pytest.fixture
+async def two_voices():
+    from tests.test_voices import Registry
+    from wyoming_rvc.voices import VoiceConfig
+
+    port = free_port()
+    settings = Settings.from_env({"WYOMING_HOST": "127.0.0.1", "WYOMING_PORT": str(port)})
+    cfgs = [
+        VoiceConfig(id="teto", name="Kasane Teto", language="en", repo_id="r/t"),
+        VoiceConfig(id="miku", name="Hatsune Miku", language="es", repo_id="r/m"),
+    ]
+    reg = Registry(rates={"miku": 40000})
+    voices = VoiceManager(cfgs, "teto", reg.provision, reg.load, 1)
+    voices.provision_all()
+    state = ServiceState(pipeline=TtsPipeline(FakePiper(), voices, SynthesisOptions()), ready=True, stage="ready")
+    service = WyomingService(settings, state, lambda: build_info(settings, voices.installed_voices()))
+    await service.start()
+    yield port
+    await service.stop()
+
+
+async def _synthesize(port, event):
+    async with AsyncTcpClient("127.0.0.1", port) as client:
+        await client.write_event(event)
+        while True:
+            reply = await asyncio.wait_for(client.read_event(), timeout=5)
+            if AudioStart.is_type(reply.type):
+                return AudioStart.from_event(reply).rate
+            if Error.is_type(reply.type):
+                return Error.from_event(reply).text
+
+
+async def test_describe_lists_every_installed_voice(two_voices):
+    async with AsyncTcpClient("127.0.0.1", two_voices) as client:
+        await client.write_event(Describe().event())
+        info = Info.from_event(await client.read_event())
+    voices = {v.name: (v.description, v.languages) for v in info.tts[0].voices}
+    assert voices == {"teto": ("Kasane Teto", ["en"]), "miku": ("Hatsune Miku", ["es"])}
+
+
+async def test_synthesize_routes_to_requested_voice(two_voices):
+    assert await _synthesize(two_voices, Synthesize(text="Hola.").event()) == 32000  # default
+    assert await _synthesize(two_voices, Synthesize(text="Hola.", voice=SynthesizeVoice(name="miku")).event()) == 40000
+
+
+async def test_unknown_voice_is_an_error_not_a_substitute(two_voices):
+    text = await _synthesize(two_voices, Synthesize(text="Hola.", voice=SynthesizeVoice(name="zundamon")).event())
+    assert "Unknown voice" in text
+    text = await _synthesize(two_voices, SynthesizeStart(voice=SynthesizeVoice(name="zundamon")).event())
+    assert "Unknown voice" in text

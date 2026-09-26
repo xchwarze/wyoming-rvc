@@ -108,3 +108,31 @@ def test_internal_value_error_is_500_not_422():
     rvc.convert = broken
     r = make_client(rvc=rvc).post("/v1/tts", json={"text": "hola"})
     assert r.status_code == 500
+
+
+def test_voices_endpoint_and_voice_parameter():
+    from tests.test_voices import Registry
+    from wyoming_rvc.voices import VoiceConfig, VoiceManager
+
+    cfgs = [
+        VoiceConfig(id="teto", name="Kasane Teto", language="en", repo_id="r/t", preload=True),
+        VoiceConfig(id="miku", name="Hatsune Miku", language="es", repo_id="r/m"),
+    ]
+    reg = Registry(rates={"miku": 40000})
+    voices = VoiceManager(cfgs, "teto", reg.provision, reg.load, 1)
+    voices.provision_all()
+    state = ServiceState(pipeline=TtsPipeline(FakePiper(), voices, SynthesisOptions()), ready=True, stage="ready")
+    client = TestClient(create_app(state))
+
+    listed = client.get("/v1/voices").json()["voices"]
+    assert [(v["id"], v["name"], v["installed"], v["loaded"]) for v in listed] == [
+        ("teto", "Kasane Teto", True, False),
+        ("miku", "Hatsune Miku", True, False),
+    ]
+    r = client.post("/v1/tts", json={"text": "Hola", "voice": "miku"})
+    with wave.open(io.BytesIO(r.content)) as wav:
+        assert wav.getframerate() == 40000
+    assert r.headers["X-TTS-Voice"] == "miku" and float(r.headers["X-TTS-Rvc-Load-Ms"]) > 0
+    assert [v["loaded"] for v in client.get("/v1/voices").json()["voices"]] == [False, True]
+    r = client.post("/v1/tts", json={"text": "Hola", "voice": "zundamon"})
+    assert r.status_code == 422 and "Unknown voice" in r.json()["error"]
