@@ -29,7 +29,7 @@ text ─► TTS source ─► RVC voice layer ─► PCM 16-bit ─► Wyoming �
 
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
-- [Home Assistant](#home-assistant)
+- [Home Assistant](#home-assistant) (app/add-on or Docker)
 - [Using another voice or TTS](#using-another-voice-or-tts)
 - [Performance](#performance)
 - [Configuration](#configuration)
@@ -94,7 +94,27 @@ docker compose exec wyoming-rvc python scripts/test_tts.py "Hi, I am Teto." -o /
 
 ## Home Assistant
 
-No custom component, REST command, or shell command is needed:
+There are two ways to run it. With either one, Home Assistant talks to it through the
+built-in **Wyoming Protocol** integration.
+
+### Option A: Home Assistant app (add-on)
+
+1. **Settings → Apps → App Store → ⋮ → Repositories**, then add
+   `https://github.com/xchwarze/wyoming-rvc`.
+2. Install **Wyoming RVC**, start it, and wait for the first start to download the
+   models (about 1 GB).
+3. Home Assistant discovers it automatically: accept the new **Wyoming Protocol** entry
+   under **Settings → Devices & Services**.
+
+The app is amd64 only. **Home Assistant OS does not give apps access to NVIDIA GPUs**, so
+there it runs on the CPU (`device: auto`), which works but is noticeably slower. The
+app's Documentation tab lists its options.
+
+### Option B: Docker on a GPU machine (lowest latency)
+
+Run the image as shown in [Quick start](#quick-start) on a machine with an NVIDIA GPU,
+then add it to Home Assistant. No custom component, REST command, or shell command is
+needed:
 
 1. **Settings → Devices & Services → Add Integration → Wyoming Protocol**
 2. **Host:** the IP of the machine running the container; **Port:** `10200`
