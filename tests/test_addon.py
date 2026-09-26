@@ -8,7 +8,7 @@ def test_apply_options_maps_to_env_and_keeps_explicit_env(tmp_path):
     path.write_text(
         json.dumps({"device": "auto", "rvc_pitch": 3, "wyoming_streaming": True, "rvc_model_file": "", "x": None})
     )
-    env = {"RVC_PITCH": "5"}
+    env = {"RVC_PITCH": "5", "MODELS_DIR": "/models"}  # the image sets MODELS_DIR
     assert addon.apply_options(env, path) is True
     assert env == {"RVC_PITCH": "5", "DEVICE": "auto", "WYOMING_STREAMING": "true", "MODELS_DIR": "/data"}
 

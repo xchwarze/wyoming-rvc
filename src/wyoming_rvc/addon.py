@@ -23,7 +23,9 @@ def apply_options(environ: MutableMapping[str, str], path: Path = OPTIONS_PATH) 
     if not path.is_file():
         return False
     options = json.loads(path.read_text(encoding="utf-8"))
-    environ.setdefault("MODELS_DIR", "/data")  # persisted by the Supervisor
+    # The image sets MODELS_DIR=/models (an anonymous volume the Supervisor drops on
+    # every update); /data is the add-on's persistent, backed-up folder.
+    environ["MODELS_DIR"] = "/data"
     for key, value in options.items():
         if value is None or value == "":
             continue
