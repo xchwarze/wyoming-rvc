@@ -1,0 +1,51 @@
+---
+name: Wyoming RVC
+version: "0.2.0"
+slug: wyoming_rvc
+description: Give any text-to-speech voice an RVC timbre (Piper + RVC over Wyoming)
+url: https://github.com/xchwarze/wyoming-rvc
+arch:
+  - amd64
+init: false
+image: ghcr.io/xchwarze/wyoming-rvc
+discovery:
+  - wyoming
+ports:
+  "10200/tcp": null
+ports_description:
+  "10200/tcp": Wyoming (only needed outside Home Assistant)
+watchdog: tcp://[HOST]:[PORT:10200]
+# Downloaded models and caches are re-fetched on demand; keep them out of backups.
+backup_exclude:
+  - "*/huggingface"
+  - "*/rvc"
+  - "*/piper"
+  - "*/cuda-cache"
+options:
+  device: auto
+  piper_voice: en_US-ljspeech-high
+  voice_language: en
+  warmup_text: System ready.
+  rvc_repo_id: Slichi/KasaneTeto
+  rvc_model_file: ""
+  rvc_index_file: ""
+  rvc_pitch: 0
+  rvc_index_rate: 0.6
+  rvc_protect: 0.33
+  rvc_mode: sentence
+  voice_name: teto
+  log_level: INFO
+schema:
+  device: list(auto|cuda|cpu)
+  piper_voice: str
+  voice_language: str
+  warmup_text: str
+  rvc_repo_id: str
+  rvc_model_file: str?
+  rvc_index_file: str?
+  rvc_pitch: int(-24,24)
+  rvc_index_rate: float(0,1)
+  rvc_protect: float(0,0.5)
+  rvc_mode: list(sentence|whole)
+  voice_name: str
+  log_level: list(DEBUG|INFO|WARNING|ERROR)

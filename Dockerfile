@@ -26,6 +26,12 @@ RUN /opt/venv/bin/pip install --no-deps --no-build-isolation /build
 # ---------------------------------------------------------------- runtime
 FROM ${PYTHON_IMAGE} AS runtime
 
+# Labels the Home Assistant Supervisor reads when the image runs as an add-on.
+ARG BUILD_VERSION=dev
+LABEL io.hass.type="addon" \
+      io.hass.arch="amd64" \
+      io.hass.version="${BUILD_VERSION}"
+
 # libgomp: OpenMP runtime used by faiss-cpu and onnxruntime.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 \
