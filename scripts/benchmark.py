@@ -6,6 +6,7 @@
   python scripts/benchmark.py --compare             # TTS-only vs every RVC mode
   python scripts/benchmark.py --modes whole,sentence -n 10 --json bench.json
   python scripts/benchmark.py --wyoming             # also measure TTFA over Wyoming
+  python scripts/benchmark.py --switch teto,miku    # voice switching: cold vs warm model
 
 Server-side timings come from the X-TTS-* response headers; TTFA is measured
 client-side on the chunked endpoint (/v1/tts/stream) and, with --wyoming, on
@@ -191,6 +192,43 @@ def print_table(rows: list[dict]) -> None:
             print("  ".join("-" * w for w in widths))
 
 
+def run_switch(client: Client, voices: list[str]) -> list[dict]:
+    """A, A, B, B, A: shows model load cost on a switch vs warm requests."""
+    a, b = voices
+    text = PHRASES["short"]
+    rows = []
+    client.post("/v1/metrics/reset")
+    for step, voice in enumerate([a, a, b, b, a], start=1):
+        _, h = client.post("/v1/tts", {"text": text, "voice": voice})
+        load_ms = float(h.get("x-tts-rvc-load-ms", "0"))
+        rows.append(
+            {
+                "step": step,
+                "voice": voice,
+                "state": "cold (model loaded)" if load_ms > 0 else "warm",
+                "source_ms": float(h.get("x-tts-source-ms", "nan")),
+                "rvc_model_load_ms": load_ms,
+                "rvc_inference_ms": float(h.get("x-tts-rvc-ms", "nan")),
+                "total_ms": float(h.get("x-tts-total-ms", "nan")),
+            }
+        )
+    memory = client.get("/info").get("gpu_memory", {})
+    header = f"{'step':>4}  {'voice':<12} {'state':<20} {'tts ms':>7} {'load ms':>8} {'rvc ms':>7} {'total ms':>9}"
+    print(header)
+    print("-" * len(header))
+    for r in rows:
+        print(
+            f"{r['step']:>4}  {r['voice']:<12} {r['state']:<20} {r['source_ms']:>7.0f} "
+            f"{r['rvc_model_load_ms']:>8.0f} {r['rvc_inference_ms']:>7.0f} {r['total_ms']:>9.0f}"
+        )
+    if memory:
+        print(
+            f"peak CUDA VRAM: allocated {memory.get('peak_allocated_mb', 0):.0f} MB, "
+            f"reserved {memory.get('peak_reserved_mb', 0):.0f} MB"
+        )
+    return rows
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--url", default="http://localhost:8080")
@@ -203,6 +241,7 @@ def main() -> None:
     parser.add_argument("--wyoming", action="store_true", help="also measure TTFA over Wyoming")
     parser.add_argument("--wyoming-host", default="localhost")
     parser.add_argument("--wyoming-port", type=int, default=10200)
+    parser.add_argument("--switch", help="two voice ids, e.g. teto,miku: benchmark voice switching")
     parser.add_argument("--json", help="write raw results to this file")
     args = parser.parse_args()
     args.phrases = args.phrases.split(",") if args.phrases else None
@@ -219,9 +258,20 @@ def main() -> None:
     rvc = info.get("rvc") or {}
     print(
         f"torch {platform.get('torch')} cuda={platform.get('cuda_runtime')} gpu={platform.get('gpu')} "
-        f"rvc={rvc.get('model_name')} ({rvc.get('sample_rate')} Hz) source={info['source'].get('name')} "
+        f"default_voice={rvc.get('default_voice')} voices={[v['id'] for v in rvc.get('voices', []) if v['installed']]} "
+        f"source={info['source'].get('name')} "
         f"server_mode={args.server_mode}"
     )
+
+    if args.switch:
+        voices = args.switch.split(",")
+        if len(voices) != 2:
+            sys.exit("--switch needs exactly two voice ids, e.g. teto,miku")
+        rows = run_switch(client, voices)
+        if args.json:
+            with open(args.json, "w", encoding="utf-8") as f:
+                json.dump({"info": info, "switch": rows}, f, indent=2)
+        return
 
     configs: list[tuple[str, dict]] = []
     if args.compare:
