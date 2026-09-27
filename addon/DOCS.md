@@ -4,8 +4,8 @@ Speaks with an [RVC](https://github.com/RVC-Project/Retrieval-based-Voice-Conver
 voice: Piper synthesizes the text, then a resident RVC model changes its timbre
 Everything stays loaded in memory. It comes with two voices, **Kasane Teto** (default) and
 **Hatsune Miku**: pick one per assistant in **Settings → Voice assistants → your assistant →
-Text-to-speech → Voice**. `voice_language` must match the assistant's language for the
-voices to be listed.
+Text-to-speech → Voice**. The voices are listed under the language of `piper_voice`, so pick
+a Piper voice in your assistant's language.
 
 ## Setup
 
@@ -31,7 +31,7 @@ voices to be listed.
 |---|---|---|
 | `device` | `auto` | `auto`, `cuda` or `cpu` |
 | `piper_voice` | `en_US-ljspeech-high` | Any [Piper voice](https://huggingface.co/rhasspy/piper-voices) |
-| `voice_language` | `en` | Language Home Assistant lists for the voice; match `piper_voice` |
+| `voice_language` | from `piper_voice` | Language Home Assistant lists the voices under (`es_MX-claude-high` → `es`); set it only to override |
 | `warmup_text` | `System ready.` | Phrase synthesized at startup, in the voice's language |
 | `rvc_repo_id` | `Slichi/KasaneTeto` | Set to another Hugging Face RVC repo (`.pth`, `.index`, or a `.zip`) to serve that single voice instead of the built-in ones |
 | `rvc_model_file` / `rvc_index_file` | – | Pick a file when the repo contains several |

@@ -100,3 +100,10 @@ def test_device_auto_resolution():
     assert (on_cpu.device, on_cpu.piper_use_cuda) == ("cpu", False)
     explicit = Settings.from_env({"DEVICE": "cpu"})
     assert resolve_device(explicit, lambda: True) is explicit
+
+
+def test_voice_language_follows_the_piper_voice():
+    assert Settings.from_env({"PIPER_VOICE": "es_MX-claude-high"}).voice_language == "es"
+    assert Settings.from_env({"PIPER_VOICE": "es_MX-claude-high", "VOICE_LANGUAGE": "es-AR"}).voice_language == "es-AR"
+    assert Settings.from_env({"PIPER_MODEL": "/models/x.onnx"}).voice_language == "en"
+    assert Settings.from_env({"SOURCE": "wyoming", "WYOMING_UPSTREAM": "tcp://p:10200"}).voice_language == "en"

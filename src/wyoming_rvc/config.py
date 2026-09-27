@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -142,10 +143,12 @@ class Settings:
             upstream_timeout_s=r.float("UPSTREAM_TIMEOUT_S", 30.0, lo=1.0, hi=600.0),
             program_name=r.str("WYOMING_PROGRAM_NAME", "Wyoming RVC"),
             voice_name=r.str("VOICE_NAME", "teto"),
-            voice_language=r.str("VOICE_LANGUAGE", "en"),
+            voice_language=r.opt_str("VOICE_LANGUAGE") or "",
             log_level=r.choice("LOG_LEVEL", "INFO", ("DEBUG", "INFO", "WARNING", "ERROR"), upper=True),
             log_format=r.choice("LOG_FORMAT", "text", ("text", "json")),
         )
+        if not settings.voice_language:
+            settings = replace(settings, voice_language=_piper_language(settings) or "en")
         settings.validate()
         return settings
 
@@ -266,3 +269,12 @@ class _Reader:
         if hi is not None and value > hi:
             raise ConfigError(f"{key} must be <= {hi}, got {value}")
         return value
+
+
+def _piper_language(settings: Settings) -> str | None:
+    """Language of a named Piper voice (``es_MX-claude-high`` -> ``es``), so Home Assistant
+    lists the voices for assistants in that language without setting VOICE_LANGUAGE."""
+    if settings.source != "piper" or settings.piper_model is not None:
+        return None
+    match = re.match(r"([a-z]{2,3})_[A-Z]{2}-", settings.piper_voice)
+    return match.group(1) if match else None

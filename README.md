@@ -151,7 +151,8 @@ Playback on a physical speaker still needs a manual check on your installation.
 (`teto`, the default) and **Hatsune Miku** (`miku`), so Home Assistant shows a voice
 selector right away (**Settings → Voice assistants → your assistant → Text-to-speech →
 Voice**). Only Teto is loaded at startup; Miku loads on first use. Their language is
-`VOICE_LANGUAGE`, which must match your assistant's language for them to be listed.
+the language of `PIPER_VOICE` (`es_MX-claude-high` → `es`), and Home Assistant lists them only
+for assistants in that language.
 
 **Another RVC voice.** Point the service at any Hugging Face repo that contains an RVC
 `.pth` (and optionally an `.index`), either directly or inside a `.zip`:
@@ -202,12 +203,12 @@ Home Assistant.
 **Another Piper voice or language.** The default source voice is `en_US-ljspeech-high`
 (female, US English). Any voice from
 [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices) works, or your own model
-with `PIPER_MODEL=/models/x.onnx`. For another language, also set the language Home
-Assistant should list and a warmup phrase in that language. For example, Spanish:
+with `PIPER_MODEL=/models/x.onnx`. The language Home Assistant lists the voices under
+follows the Piper voice; with `PIPER_MODEL`, set `VOICE_LANGUAGE` yourself. Optionally use
+a warmup phrase in that language. For example, Spanish:
 
 ```yaml
       - PIPER_VOICE=es_AR-daniela-high   # or es_MX-claude-high, es_ES-davefx-medium, ...
-      - VOICE_LANGUAGE=es
       - WARMUP_TEXT=Sistema iniciado.
 ```
 
@@ -335,7 +336,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `VOICES_FILE` | `/config/voices.yaml` | Voice list. If the default path is missing: your `RVC_*` voice if you set one, otherwise the built-in Teto and Miku |
 | `DEFAULT_VOICE` | first enabled voice | Voice used when a request names none |
 | `RVC_MAX_LOADED_MODELS` | `1` | RVC voices kept in VRAM (LRU). Each one costs the model plus its index, typically 100–400 MB |
-| `VOICE_NAME` / `VOICE_LANGUAGE` | `teto` / `en` | Voice advertised to Home Assistant (set the language to match `PIPER_VOICE`) |
+| `VOICE_NAME` / `VOICE_LANGUAGE` | `teto` / from `PIPER_VOICE` | Voice id and language advertised to Home Assistant. The language defaults to the Piper voice's (`en` for other sources) |
 | `WYOMING_PROGRAM_NAME` | `Wyoming RVC` | Name shown in Home Assistant |
 | `WYOMING_HOST` / `WYOMING_PORT` | `0.0.0.0` / `10200` | Wyoming server |
 | `WYOMING_STREAMING` | `true` | Advertise streaming text input |

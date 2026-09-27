@@ -1,6 +1,6 @@
 ---
 name: Wyoming RVC
-version: "0.4.0"
+version: "0.4.1"
 slug: wyoming_rvc
 description: Give any text-to-speech voice an RVC timbre (Piper + RVC over Wyoming)
 url: https://github.com/xchwarze/wyoming-rvc
@@ -25,7 +25,7 @@ backup_exclude:
 options:
   device: auto
   piper_voice: en_US-ljspeech-high
-  voice_language: en
+  voice_language: ""
   warmup_text: System ready.
   rvc_repo_id: Slichi/KasaneTeto
   rvc_model_file: ""
@@ -41,7 +41,7 @@ options:
 schema:
   device: list(auto|cuda|cpu)
   piper_voice: str
-  voice_language: str
+  voice_language: str?
   warmup_text: str
   rvc_repo_id: str
   rvc_model_file: str?
