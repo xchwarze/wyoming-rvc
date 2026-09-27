@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1
+
+- The voices are listed under the language of `piper_voice` (for example `es` for
+  `es_MX-claude-high`), so Home Assistant offers them to assistants in that language without
+  setting `voice_language`. Previously they stayed `en` and were hidden from a Spanish
+  assistant. Reload the Wyoming integration after updating.
+
 ## 0.4.0
 
 - Comes with two voices, Kasane Teto (default) and Hatsune Miku, so the voice selector in
