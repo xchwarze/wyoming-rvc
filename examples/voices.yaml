@@ -1,4 +1,5 @@
-# Several RVC voices in one instance. Copy to /config/voices.yaml (Docker: ./config/voices.yaml;
+# Several RVC voices in one instance. Without this file you get the built-in teto and miku.
+# Copy to /config/voices.yaml (Docker: ./config/voices.yaml;
 # Home Assistant app: /addon_configs/<slug>_wyoming_rvc/voices.yaml).
 # Every voice listed here is shown in Home Assistant; pick one per assistant.
 # Models are downloaded at startup but loaded into VRAM on first use (LRU, RVC_MAX_LOADED_MODELS).
@@ -19,6 +20,12 @@ voices:
     index_rate: 0.6
     protect: 0.33
     preload: true
+
+  miku:
+    name: "Hatsune Miku"
+    repo_id: "binant/Hatsune_Miku__RVC_v2_"
+    revision: "b05cba64eaa30f3bac39ff8ce7caff14a9af122b"   # pin a commit so the model cannot change
+    pitch: 2
 
   # Replace with any Hugging Face repo holding an RVC .pth (and optional .index or a .zip).
   myvoice:

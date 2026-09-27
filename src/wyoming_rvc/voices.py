@@ -67,8 +67,25 @@ class VoiceConfig:
     f0_method: str = "rmvpe"
 
 
+# Served when there is no voices file and the RVC_* voice was not customized, so a fresh
+# install already offers a choice in Home Assistant. Languages follow VOICE_LANGUAGE.
+BUILTIN_VOICES = """
+voices:
+  teto:
+    name: "Kasane Teto"
+    repo_id: "Slichi/KasaneTeto"
+    preload: true
+  miku:
+    name: "Hatsune Miku"
+    repo_id: "binant/Hatsune_Miku__RVC_v2_"
+    revision: "b05cba64eaa30f3bac39ff8ce7caff14a9af122b"
+    pitch: 2
+"""
+
+
 def load_voice_configs(settings: Settings) -> tuple[list[VoiceConfig], str]:
-    """Voices from VOICES_FILE (default /config/voices.yaml), else the single RVC_* voice.
+    """Voices from VOICES_FILE (default /config/voices.yaml); else the RVC_* voice if it was
+    customized; else the built-in voices.
 
     Returns (voices, default voice id).
     """
@@ -76,6 +93,11 @@ def load_voice_configs(settings: Settings) -> tuple[list[VoiceConfig], str]:
     if not path.is_file():
         if settings.voices_file is not None:
             raise ConfigError(f"VOICES_FILE not found: {path}")
+        if not _customized(settings):
+            voices = parse_voices(BUILTIN_VOICES, settings, "built-in voices")
+            default = settings.default_voice or voices[0].id
+            _check_default(default, voices)
+            return voices, default
         voice = VoiceConfig(
             id=settings.voice_name,
             name=settings.voice_name,
@@ -100,6 +122,16 @@ def load_voice_configs(settings: Settings) -> tuple[list[VoiceConfig], str]:
     default = settings.default_voice or enabled[0].id
     _check_default(default, enabled)
     return voices, default
+
+
+def _customized(settings: Settings) -> bool:
+    """Whether the RVC_* / VOICE_NAME settings describe the user's own single voice."""
+    defaults = Settings()
+    return (
+        settings.rvc_repo_id != defaults.rvc_repo_id
+        or settings.voice_name != defaults.voice_name
+        or any((settings.rvc_revision, settings.rvc_model_file, settings.rvc_index_file))
+    )
 
 
 def parse_voices(text: str, settings: Settings, source: str = "voices.yaml") -> list[VoiceConfig]:

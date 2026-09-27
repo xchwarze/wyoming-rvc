@@ -2,11 +2,14 @@
 
 Speaks with an [RVC](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion)
 voice: Piper synthesizes the text, then a resident RVC model changes its timbre
-(default: Kasane Teto, TetoTalk). Everything stays loaded in memory.
+Everything stays loaded in memory. It comes with two voices, **Kasane Teto** (default) and
+**Hatsune Miku**: pick one per assistant in **Settings → Voice assistants → your assistant →
+Text-to-speech → Voice**. `voice_language` must match the assistant's language for the
+voices to be listed.
 
 ## Setup
 
-1. Start the add-on. The first start downloads about 1 GB of models into the add-on's
+1. Start the add-on. The first start downloads about 1.3 GB of models into the add-on's
    data folder; later starts reuse them.
 2. Home Assistant discovers it automatically: **Settings → Devices & Services** shows a
    new **Wyoming Protocol** entry. Click **Configure**.
@@ -30,13 +33,13 @@ voice: Piper synthesizes the text, then a resident RVC model changes its timbre
 | `piper_voice` | `en_US-ljspeech-high` | Any [Piper voice](https://huggingface.co/rhasspy/piper-voices) |
 | `voice_language` | `en` | Language Home Assistant lists for the voice; match `piper_voice` |
 | `warmup_text` | `System ready.` | Phrase synthesized at startup, in the voice's language |
-| `rvc_repo_id` | `Slichi/KasaneTeto` | Hugging Face repo with the RVC model (`.pth`, `.index`, or a `.zip`) |
+| `rvc_repo_id` | `Slichi/KasaneTeto` | Set to another Hugging Face RVC repo (`.pth`, `.index`, or a `.zip`) to serve that single voice instead of the built-in ones |
 | `rvc_model_file` / `rvc_index_file` | – | Pick a file when the repo contains several |
 | `rvc_pitch` | `0` | Pitch shift in semitones (−24…24) |
 | `rvc_index_rate` | `0.6` | How strongly to match the model's timbre (0…1) |
 | `rvc_protect` | `0.33` | Protects consonants and breaths (0…0.5) |
 | `rvc_mode` | `sentence` | `sentence` (fastest first audio) or `whole` |
-| `voice_name` | `teto` | Voice name shown in Home Assistant |
+| `voice_name` | `teto` | Voice id of your own single voice (changing it also replaces the built-in voices) |
 | `default_voice` | – | Voice used when Home Assistant names none (with `voices.yaml`) |
 | `rvc_max_loaded_models` | `1` | RVC voices kept in VRAM; the least recently used is unloaded |
 | `log_level` | `INFO` | Log verbosity |
@@ -45,7 +48,7 @@ voice: Piper synthesizes the text, then a resident RVC model changes its timbre
 
 Create `voices.yaml` in this app's config folder (`/addon_configs/<id>_wyoming_rvc/`,
 reachable with the File editor or Samba apps) and restart the app. Each voice in it is
-listed in Home Assistant instead of the `rvc_repo_id` voice; `rvc_pitch`, `rvc_index_rate`,
+listed in Home Assistant instead of the built-in voices; `rvc_pitch`, `rvc_index_rate`,
 `rvc_protect` and `voice_language` become the defaults for values a voice leaves out. Example:
 
 ```yaml
@@ -60,7 +63,8 @@ voices:
     pitch: 4
 ```
 
-Voices download at startup and load into VRAM on first use. Switching to a voice that is
+Voices download at startup and load into VRAM on first use. After changing the voices,
+reload the Wyoming integration (**Settings → Devices & Services → Wyoming → ⋮ → Reload**). Switching to a voice that is
 not loaded adds one model load to that reply.
 
 Other settings from the README can be passed as environment variables when running

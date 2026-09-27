@@ -6,7 +6,7 @@ voice an **RVC timbre**, for Home Assistant Assist:
 ```
 text ─► TTS source ─► RVC voice layer ─► PCM 16-bit ─► Wyoming ─► Home Assistant
         │                 │
-        │                 └─ any RVC v1/v2 model from Hugging Face (default: TetoTalk, Kasane Teto)
+        │                 └─ any RVC v1/v2 model from Hugging Face (built in: Kasane Teto and Hatsune Miku)
         ├─ SOURCE=piper    Piper in-process (default, fastest)
         └─ SOURCE=wyoming  any existing Wyoming TTS (wyoming-piper, …) as upstream
 ```
@@ -60,7 +60,7 @@ docker compose up -d
 docker compose logs -f       # wait for "Service ready"
 ```
 
-The first start downloads about 1 GB (Piper voice, TetoTalk, ContentVec, RMVPE) into
+The first start downloads about 1.3 GB (Piper voice, the two built-in RVC voices, ContentVec, RMVPE) into
 `./models`. With Piper on the GPU (the default on a GPU host), the first warmup also
 JIT-compiles CUDA kernels once (up to about 1 minute on RTX 50xx). Both results are cached;
 later starts take seconds.
@@ -147,6 +147,12 @@ Playback on a physical speaker still needs a manual check on your installation.
 
 ## Using another voice or TTS
 
+**Built-in voices.** Out of the box the service offers two RVC voices, **Kasane Teto**
+(`teto`, the default) and **Hatsune Miku** (`miku`), so Home Assistant shows a voice
+selector right away (**Settings → Voice assistants → your assistant → Text-to-speech →
+Voice**). Only Teto is loaded at startup; Miku loads on first use. Their language is
+`VOICE_LANGUAGE`, which must match your assistant's language for them to be listed.
+
 **Another RVC voice.** Point the service at any Hugging Face repo that contains an RVC
 `.pth` (and optionally an `.index`), either directly or inside a `.zip`:
 
@@ -186,8 +192,10 @@ resident and unloads the least recently used one. A switch to a voice that is no
 resident costs one model load (see `scripts/benchmark.py --switch teto,miku`); raise the
 limit if you have the VRAM and switch often. A voice in use is never unloaded. A request
 for an unknown voice fails with an error instead of falling back to another voice.
-Without `voices.yaml`, the `RVC_*` variables define a single voice as before; the one
-difference from 0.2 is that a request naming another voice (for example after changing
+Without `voices.yaml`, you get the built-in voices, or, if you set your own `RVC_REPO_ID`,
+`RVC_MODEL_FILE`, `RVC_INDEX_FILE`, `RVC_REVISION` or `VOICE_NAME`, that single voice as
+before. After adding voices, reload the Wyoming integration in Home Assistant (it reads the
+voice list once). The one difference from 0.2 is that a request naming another voice (for example after changing
 `VOICE_NAME`) now fails instead of using the configured voice, so reselect the voice in
 Home Assistant.
 
@@ -324,7 +332,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `RVC_MODE` | `sentence` | `sentence` (lowest time to first audio) or `whole` (lowest total time) |
 | `RVC_CONCURRENCY` | `1` | Simultaneous conversions on the same loaded models. At 1, extra requests wait in a queue; each extra slot adds peak activation memory. |
 | `RVC_ASSETS_REPO_ID` / `RVC_ASSETS_REVISION` | `IAHispano/Applio` / `main` | Source of ContentVec and RMVPE |
-| `VOICES_FILE` | `/config/voices.yaml` | Voice list; if the default path is missing, the `RVC_*` variables define one voice |
+| `VOICES_FILE` | `/config/voices.yaml` | Voice list. If the default path is missing: your `RVC_*` voice if you set one, otherwise the built-in Teto and Miku |
 | `DEFAULT_VOICE` | first enabled voice | Voice used when a request names none |
 | `RVC_MAX_LOADED_MODELS` | `1` | RVC voices kept in VRAM (LRU). Each one costs the model plus its index, typically 100–400 MB |
 | `VOICE_NAME` / `VOICE_LANGUAGE` | `teto` / `en` | Voice advertised to Home Assistant (set the language to match `PIPER_VOICE`) |
@@ -526,5 +534,8 @@ It vendors minimal inference code from [Applio](https://github.com/IAHispano/App
 **No model weights are included** in the repository or the image; they are downloaded
 at runtime from their original locations. TetoTalk (`Slichi/KasaneTeto`) declares
 `openrail`. Kasane Teto is a character/voicebank by TWINDRILL with its own terms. The
+built-in Miku voice is a community model
+([binant/Hatsune_Miku__RVC_v2_](https://huggingface.co/binant/Hatsune_Miku__RVC_v2_), pinned
+revision) of Crypton Future Media's character, which has its own terms. The
 default Piper voice is trained on LJ Speech (public domain). Check the license of any voice you use, and do not
 use voice conversion to impersonate real people.

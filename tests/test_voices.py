@@ -81,6 +81,15 @@ def test_env_fallback_is_a_single_preloaded_voice(tmp_path):
     assert (voices[0].repo_id, voices[0].pitch, voices[0].preload) == ("a/b", 2, True)
 
 
+def test_builtin_voices_without_file_or_custom_voice():
+    voices, default = load_voice_configs(settings(VOICE_LANGUAGE="es", RVC_PITCH="1"))
+    assert default == "teto" and [v.id for v in voices] == ["teto", "miku"]
+    assert all(v.language == "es" for v in voices) and voices[0].pitch == 1 and voices[1].pitch == 2
+    assert load_voice_configs(settings(RVC_REPO_ID="Slichi/KasaneTeto", DEFAULT_VOICE="miku"))[1] == "miku"
+    for custom in ({"VOICE_NAME": "mine"}, {"RVC_MODEL_FILE": "/models/x.pth"}):
+        assert len(load_voice_configs(settings(**custom))[0]) == 1
+
+
 def test_voices_file_default_voice_and_errors(tmp_path):
     path = tmp_path / "voices.yaml"
     path.write_text(YAML)
