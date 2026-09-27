@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Comes with two voices, Kasane Teto (default) and Hatsune Miku, so the voice selector in
+  Home Assistant works out of the box. Setting your own `rvc_repo_id` or `voice_name`, or a
+  `voices.yaml`, replaces them as before. The first start downloads Miku (about 280 MB).
+- After updating, reload the Wyoming integration so Home Assistant sees the new voice.
+
 ## 0.3.1
 
 - Models are now stored in the app's `/data` folder, so they survive updates (they were
