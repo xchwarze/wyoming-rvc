@@ -366,6 +366,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `VOICES_FILE` | `/config/voices.yaml` | Voice list. If the default path is missing: your `RVC_*` voice if you set one, otherwise the built-in Teto and Miku |
 | `DEFAULT_VOICE` | first enabled voice | Voice used when a request names none |
 | `RVC_MAX_LOADED_MODELS` | `1` | RVC voices kept in VRAM (LRU). Each one costs the model plus its index, typically 100–400 MB |
+| `IDLE_SLEEP_S` | `0` | Seconds without a request before every model (RVC voices, ContentVec, RMVPE, in-process Piper) is unloaded to free VRAM; the next request reloads them. `0` never sleeps; `300` is a good start |
 | `SOURCE_MAX_LOADED` | `4` | Per-voice TTS sources (Piper voices, upstream connections from `voices.yaml`) kept loaded (LRU); the global source is never unloaded |
 | `VOICE_NAME` / `VOICE_LANGUAGE` | `teto` / from `PIPER_VOICE` | Voice id and language advertised to Home Assistant. The language defaults to the Piper voice's (`en` for other sources) |
 | `WYOMING_PROGRAM_NAME` | `Wyoming RVC` | Name shown in Home Assistant |
@@ -379,6 +380,8 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `WARMUP_TEXT` | `System ready.` | Synthesized and discarded at startup (use your voice's language) |
 | `MAX_TEXT_CHARS` | `5000` | HTTP request limit |
 | `LOG_LEVEL` / `LOG_FORMAT` | `INFO` / `text` | `LOG_FORMAT=json` gives structured logs |
+
+**Idle sleep.** Off by default. With `IDLE_SLEEP_S` above 0 (for example 300), a server with no request for that long unloads the RVC voices, ContentVec, RMVPE and the in-process Piper voices (the global one and those of `voices.yaml`), and reloads them when the next request arrives. That request is slower by the reload time (logged as `Models reloaded in … ms`). The service stays ready (`/readyz`) while asleep, and `/info` shows an `idle_sleep` block. It frees GPU memory; most of the process's system RAM (the CUDA runtime) stays. With `SOURCE=wyoming` and `RVC_ENABLED=false` there is nothing to unload.
 
 **Model resolution.** The RVC repo is snapshot-downloaded (only `*.pth`, `*.index`,
 `*.zip`) into `HF_HOME`. Zips are extracted once to `/models/rvc/<repo>/<archive>/`,

@@ -20,6 +20,7 @@ from . import __version__
 from .config import ConfigError, Settings
 from .http_server import ServiceState, UvicornServer, create_app
 from .metrics import now_ms
+from .sleep import IdleSleeper, release_memory
 
 _LOGGER = logging.getLogger("wyoming_rvc")
 
@@ -145,6 +146,8 @@ class Service:
         self.source_name = ""
         self.sources = None  # SourceRegistry: global source + per-voice sources
         self.voices = None  # VoiceManager when RVC is enabled
+        self.shared = None  # SharedModels (ContentVec, RMVPE) when RVC is enabled
+        self.sleeper: IdleSleeper | None = None  # when IDLE_SLEEP_S > 0
         self.warmup_ms: float | None = None
         self.wyoming = None
         self.http: UvicornServer | None = None
@@ -174,6 +177,7 @@ class Service:
             "rvc": rvc,
             "defaults": self.state.pipeline.defaults.__dict__ if self.state.pipeline else None,
             "wyoming": {"port": s.wyoming_port, "program": s.program_name, "streaming": s.wyoming_streaming},
+            "idle_sleep": self.sleeper.status() if self.sleeper else {"idle_sleep_s": s.idle_sleep_s, "asleep": False},
             "warmup_ms": self.warmup_ms,
             "gpu_memory": self._gpu_memory(),
         }
@@ -244,6 +248,7 @@ class Service:
         _LOGGER.info("Voices configured: %s (default %s)", [c.id for c in configs if c.enabled], default_voice)
         _LOGGER.info("Loading RMVPE / ContentVec (shared by all voices)...")
         shared = SharedModels(s.device, resolve_rvc_assets(s))
+        self.shared = shared
 
         def provision(voice):
             files = resolve_rvc_files(
@@ -277,6 +282,36 @@ class Service:
         manager.resolve(default_voice)  # the default voice must be usable: fail fast otherwise
         self.voices = manager
 
+    # ------------------------------------------------------------------ idle sleep
+
+    def _can_sleep(self) -> bool:
+        return self.shared is not None or hasattr(self.source, "unload")
+
+    def _unload_blocking(self) -> None:
+        if self.shared is not None:
+            self.shared.unload()
+        unload = getattr(self.source, "unload", None)  # only the in-process Piper holds a model
+        if unload is not None:
+            unload()
+        if self.sources is not None:
+            self.sources.unload_all()  # per-voice Piper voices reload on their next use
+        release_memory()
+
+    def _wake_blocking(self) -> None:  # idempotent: loads whatever is missing
+        ensure = getattr(self.source, "ensure_loaded", None)
+        if ensure is not None:
+            ensure()
+        if self.shared is not None:
+            self.shared.load()
+
+    async def _sleep_models(self) -> None:
+        if self.voices is not None:
+            await self.voices.unload_all()  # RVC voices reload lazily on their next use
+        await run_in_daemon_thread(self._unload_blocking)
+
+    async def _wake_models(self) -> None:
+        await run_in_daemon_thread(self._wake_blocking)
+
     async def run(self) -> None:
         s = self.settings
         stop = asyncio.Event()
@@ -303,12 +338,18 @@ class Service:
             from .pipeline import SynthesisOptions, TtsPipeline
             from .wyoming_server import WyomingService, build_info
 
+            if s.idle_sleep_s > 0 and self._can_sleep():
+                self.sleeper = IdleSleeper(s.idle_sleep_s, self._sleep_models, self._wake_models)
+            elif s.idle_sleep_s > 0:
+                _LOGGER.info("IDLE_SLEEP_S is set but there is nothing to unload (SOURCE=wyoming, RVC_ENABLED=false)")
+
             pipeline = TtsPipeline(
                 source=self.source,
                 rvc=self.voices,
                 defaults=SynthesisOptions.from_settings(s),
                 rvc_concurrency=s.rvc_concurrency,
                 sentence_silence_ms=s.sentence_silence_ms,
+                sleeper=self.sleeper,
                 sources=self.sources,
             )
             self.state.pipeline = pipeline
@@ -335,6 +376,9 @@ class Service:
             self.state.ready = True
             self.state.stage = "ready"
             _LOGGER.info("Service ready")
+            if self.sleeper is not None:
+                self.sleeper.start()
+                _LOGGER.info("Idle sleep on: models unload after %.0f s without a request", s.idle_sleep_s)
             from .addon import announce_wyoming
 
             await asyncio.to_thread(announce_wyoming, s.wyoming_port, os.environ)
@@ -343,6 +387,8 @@ class Service:
             _LOGGER.info("Shutting down...")
             self.state.ready = False
             self.state.stage = "stopping"
+            if self.sleeper is not None:
+                await self.sleeper.stop()
             if self.wyoming is not None:
                 await self.wyoming.stop()
             if self.http is not None:

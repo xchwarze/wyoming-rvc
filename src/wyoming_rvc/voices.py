@@ -543,6 +543,16 @@ class VoiceManager:
         await asyncio.to_thread(slot.engine.unload)
         return True
 
+    async def unload_all(self) -> list[str]:
+        """Unload every idle loaded voice (idle sleep). Voices in use stay. Returns the ids unloaded."""
+        async with self._cond:
+            idle = [vid for vid, slot in self._loaded.items() if slot.ready and not slot.users]
+            engines = [self._loaded.pop(vid).engine for vid in idle]
+            self._cond.notify_all()
+        for engine in engines:
+            await asyncio.to_thread(engine.unload)
+        return idle
+
     async def preload(self) -> list[str]:
         """Load voices marked ``preload`` (the default voice if none is), up to ``max_loaded``.
 

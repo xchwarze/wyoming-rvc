@@ -23,6 +23,7 @@ import numpy as np
 from .audio import float_to_pcm16, prevent_clipping, silence
 from .config import F0_METHODS, RVC_MODES, Settings
 from .metrics import Stopwatch, SynthesisMetrics, now_ms
+from .sleep import IdleSleeper
 from .voices import VoiceConfig, VoiceManager
 
 if TYPE_CHECKING:
@@ -133,6 +134,7 @@ class TtsPipeline:
         defaults: SynthesisOptions,
         rvc_concurrency: int = 1,
         sentence_silence_ms: int = 0,
+        sleeper: IdleSleeper | None = None,
         sources: SourceRegistry | None = None,
     ) -> None:
         self.source = source  # the global source; voices may name their own (see ``sources``)
@@ -141,6 +143,7 @@ class TtsPipeline:
         self.voices = rvc if (rvc is None or isinstance(rvc, VoiceManager)) else VoiceManager.single(rvc)
         self.defaults = defaults.validate()
         self.sentence_silence_ms = sentence_silence_ms
+        self.sleeper = sleeper
         self._rvc_slots = asyncio.Semaphore(rvc_concurrency)
 
     def options(self, **overrides: object) -> SynthesisOptions:
@@ -169,7 +172,19 @@ class TtsPipeline:
     async def stream(
         self, text: str, options: SynthesisOptions | None = None, metrics: SynthesisMetrics | None = None
     ) -> AsyncIterator[bytes]:
-        """Yield PCM16 mono chunks at ``sample_rate(options)``; fills ``metrics``."""
+        """Yield PCM16 mono chunks at ``sample_rate(options)``; fills ``metrics``.
+
+        With idle sleep on, the models are reloaded first if they were unloaded, and are not
+        unloaded again while this request is open.
+        """
+        guard = self.sleeper.request() if self.sleeper is not None else contextlib.nullcontext()
+        async with guard, contextlib.aclosing(self._stream(text, options, metrics)) as chunks:
+            async for chunk in chunks:
+                yield chunk
+
+    async def _stream(
+        self, text: str, options: SynthesisOptions | None = None, metrics: SynthesisMetrics | None = None
+    ) -> AsyncIterator[bytes]:
         options = options or self.defaults
         metrics = metrics if metrics is not None else SynthesisMetrics()
         start = now_ms()

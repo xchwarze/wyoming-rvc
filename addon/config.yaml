@@ -37,6 +37,7 @@ options:
   voice_name: teto
   default_voice: ""
   rvc_max_loaded_models: 1
+  idle_sleep_s: 0
   log_level: INFO
 schema:
   device: list(auto|cuda|cpu)
@@ -53,4 +54,5 @@ schema:
   voice_name: str
   default_voice: str?
   rvc_max_loaded_models: int(1,16)
+  idle_sleep_s: float(0,86400)
   log_level: list(DEBUG|INFO|WARNING|ERROR)

@@ -35,6 +35,7 @@ class PiperEngine:
         self.options = options
         self._voice = None
         self._syn_config = None
+        self._sample_rate: int | None = None  # kept while unloaded: callers ask before synthesizing
         self._lock = _SYNTHESIS_LOCK
 
     def load(self) -> None:
@@ -53,6 +54,7 @@ class PiperEngine:
                 f"(available: {onnxruntime.get_available_providers()}). Install onnxruntime-gpu or disable it."
             )
         self._voice = PiperVoice.load(self.model_path, config_path=self.config_path, use_cuda=self.options.use_cuda)
+        self._sample_rate = int(self._voice.config.sample_rate)
         providers = self._voice.session.get_providers()
         if self.options.use_cuda and providers[0] != "CUDAExecutionProvider":
             raise RuntimeError(f"Piper on CUDA (PIPER_DEVICE) but the ONNX session runs on {providers}")
@@ -72,14 +74,29 @@ class PiperEngine:
         )
 
     @property
+    def loaded(self) -> bool:
+        return self._voice is not None
+
+    def ensure_loaded(self) -> None:
+        """Reload after ``unload`` (idle sleep); a no-op when the voice is resident."""
+        if self._voice is None:
+            self.load()
+
+    def unload(self) -> None:
+        """Drop the ONNX session; ``sample_rate`` stays available."""
+        with self._lock:  # wait for a synthesis step that is still running
+            self._voice = None
+            self._syn_config = None
+
+    @property
     def device(self) -> str:
         return "cuda" if self.options.use_cuda else "cpu"
 
     @property
     def sample_rate(self) -> int:
-        if self._voice is None:
+        if self._sample_rate is None:
             raise RuntimeError("Piper is not loaded")
-        return int(self._voice.config.sample_rate)
+        return self._sample_rate
 
     def sentences(self, text: str) -> Iterator[np.ndarray]:
         """Synthesize ``text`` lazily, one sentence at a time."""

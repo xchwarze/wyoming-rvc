@@ -69,12 +69,30 @@ class SharedModels:
             torch.backends.cudnn.benchmark = False  # input lengths vary per request
         # Same 48 Hz high-pass Applio applies to the 16 kHz input.
         self.highpass = signal.butter(N=5, Wn=48, btype="high", fs=INPUT_SR)
-        _LOGGER.info("Loading ContentVec from %s", assets.contentvec_dir)
-        self.hubert = self._load_hubert(assets.contentvec_dir)
-        _LOGGER.info("Loading RMVPE from %s", assets.rmvpe)
-        from .vendor.applio.predictors.rmvpe import RMVPE0Predictor
+        self._assets = assets
+        self.hubert = None
+        self.rmvpe = None
+        self.load()
 
-        self.rmvpe = RMVPE0Predictor(str(assets.rmvpe), device=self.device)
+    @property
+    def loaded(self) -> bool:
+        return self.hubert is not None and self.rmvpe is not None
+
+    def load(self) -> None:
+        """Load ContentVec and RMVPE, whichever is not resident yet (also the wake-up after ``unload``)."""
+        if self.hubert is None:
+            _LOGGER.info("Loading ContentVec from %s", self._assets.contentvec_dir)
+            self.hubert = self._load_hubert(self._assets.contentvec_dir)
+        if self.rmvpe is None:
+            _LOGGER.info("Loading RMVPE from %s", self._assets.rmvpe)
+            from .vendor.applio.predictors.rmvpe import RMVPE0Predictor
+
+            self.rmvpe = RMVPE0Predictor(str(self._assets.rmvpe), device=self.device)
+
+    def unload(self) -> None:
+        """Drop ContentVec and RMVPE; the caller releases the freed memory (idle sleep)."""
+        self.hubert = None
+        self.rmvpe = None
 
     def _load_hubert(self, contentvec_dir: Path):
         from torch import nn

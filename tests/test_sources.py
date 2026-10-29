@@ -132,6 +132,14 @@ def test_registry_shares_and_evicts(fake_piper):
     assert fake_piper[-1].piper_length_scale == 1.0
 
 
+def test_registry_unload_all_drops_piper_voices(fake_piper):
+    reg = SourceRegistry(SETTINGS, object())
+    v = voices()
+    first = reg.get(v["jarvis"].source)
+    assert reg.unload_all() == [v["jarvis"].source] and reg.loaded() == []
+    assert reg.get(v["jarvis"].source) is not first  # idle sleep: loaded again on its next use
+
+
 # --------------------------------------------------------------------------- pipeline
 
 

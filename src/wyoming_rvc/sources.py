@@ -85,6 +85,20 @@ class SourceRegistry:
                     _LOGGER.info("Unloading source %s (SOURCE_MAX_LOADED=%d)", evicted.describe(), self.max_loaded)
             return source
 
+    def unload_all(self) -> list[SourceSpec]:
+        """Drop the per-voice Piper voices (idle sleep); they load again on their next use.
+
+        Upstream sources hold no model and stay. Returns the specs dropped.
+        """
+        with self._build_lock, self._lock:
+            dropped = [spec for spec in self._cache if spec.kind == "piper"]
+            engines = [self._cache.pop(spec) for spec in dropped]
+        for engine in engines:
+            unload = getattr(engine, "unload", None)
+            if unload is not None:
+                unload()
+        return dropped
+
     # ------------------------------------------------------------------ construction
 
     def _piper_settings(self, spec: SourceSpec) -> Settings:
