@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- `SENTENCE_SILENCE_MS` also applies between the sentences of a streamed reply (what Home
+  Assistant sends with streaming conversation agents); before, it was only applied inside
+  one request.
+- With an upstream Wyoming TTS, a sentence ending in "no." ("I said no.") is no longer
+  merged with the next one.
+- Wyoming requests longer than `MAX_TEXT_CHARS` (5000) get an error, like HTTP ones.
+- Docker: experimental `RVC_HALF=true` runs ContentVec and the RVC generators in fp16 on the
+  GPU (less VRAM, usually faster). Off by default.
+
 ## 0.5.0
 
 - New option `idle_sleep_s` (seconds; default `0` = off, `300` is a good start): after that

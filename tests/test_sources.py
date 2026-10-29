@@ -1,5 +1,6 @@
 """Per-voice TTS sources: voices.yaml keys, SourceRegistry, pipeline routing."""
 
+import threading
 from dataclasses import replace
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from wyoming_rvc import model_loader, piper_engine
 from wyoming_rvc.config import ConfigError, Settings
 from wyoming_rvc.pipeline import SynthesisOptions, TtsPipeline
 from wyoming_rvc.sources import SourceRegistry
-from wyoming_rvc.voices import VoiceManager, parse_voices
+from wyoming_rvc.voices import SourceSpec, VoiceManager, parse_voices
 
 SETTINGS = Settings.from_env({})
 
@@ -138,6 +139,31 @@ def test_registry_unload_all_drops_piper_voices(fake_piper):
     first = reg.get(v["jarvis"].source)
     assert reg.unload_all() == [v["jarvis"].source] and reg.loaded() == []
     assert reg.get(v["jarvis"].source) is not first  # idle sleep: loaded again on its next use
+
+
+def test_slow_upstream_probe_does_not_hold_up_other_voices(fake_piper):
+    reg = SourceRegistry(SETTINGS, object())
+    piper_build, probing, release = reg._build, threading.Event(), threading.Event()
+
+    def build(spec):
+        if spec.kind != "wyoming":
+            return piper_build(spec)
+        probing.set()
+        release.wait(5)  # an upstream that takes its time to answer
+        return "upstream"
+
+    reg._build = build
+    upstream = SourceSpec(kind="wyoming", upstream="tcp://slow:10200")
+    worker = threading.Thread(target=reg.get, args=(upstream,))
+    worker.start()
+    try:
+        assert probing.wait(5)
+        assert reg.get(voices()["jarvis"].source) is not None
+        assert worker.is_alive()  # the Piper voice loaded while the probe was still waiting
+    finally:
+        release.set()
+        worker.join(5)
+    assert reg.get(upstream) == "upstream"
 
 
 # --------------------------------------------------------------------------- pipeline

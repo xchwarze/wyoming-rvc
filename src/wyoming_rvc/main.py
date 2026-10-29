@@ -247,7 +247,7 @@ class Service:
         configs, default_voice = load_voice_configs(s)
         _LOGGER.info("Voices configured: %s (default %s)", [c.id for c in configs if c.enabled], default_voice)
         _LOGGER.info("Loading RMVPE / ContentVec (shared by all voices)...")
-        shared = SharedModels(s.device, resolve_rvc_assets(s))
+        shared = SharedModels(s.device, resolve_rvc_assets(s), half=s.rvc_half)
         self.shared = shared
 
         def provision(voice):
