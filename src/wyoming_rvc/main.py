@@ -143,6 +143,7 @@ class Service:
         self.torch_facts: dict[str, Any] = {}
         self.source = None
         self.source_name = ""
+        self.sources = None  # SourceRegistry: global source + per-voice sources
         self.voices = None  # VoiceManager when RVC is enabled
         self.warmup_ms: float | None = None
         self.wyoming = None
@@ -226,10 +227,12 @@ class Service:
     def load_models(self) -> None:
         """Blocking: load the source and shared RVC models, provision every voice."""
         from .model_loader import resolve_rvc_assets, resolve_rvc_files
+        from .sources import SourceRegistry
         from .voices import VoiceManager, load_voice_configs
 
         s = self.settings
         self.load_source()
+        self.sources = SourceRegistry(s, self.source)
         if not s.rvc_enabled:
             _LOGGER.warning("RVC_ENABLED=false: serving the TTS source unchanged")
             return
@@ -247,6 +250,9 @@ class Service:
                 voice.repo_id, voice.revision, voice.model_file, voice.index_file, s.rvc_data_dir, f"voice {voice.id}"
             )
             _LOGGER.info("Voice %s: model=%s index=%s", voice.id, files.model, files.index or "none")
+            if voice.source is not None:
+                self.sources.prepare(voice.source)  # a voice with an unusable source is not offered
+                _LOGGER.info("Voice %s: source=%s", voice.id, voice.source.describe())
             return files, validate_voice_files(files.model, files.index)
 
         def load(voice, files):
@@ -303,6 +309,7 @@ class Service:
                 defaults=SynthesisOptions.from_settings(s),
                 rvc_concurrency=s.rvc_concurrency,
                 sentence_silence_ms=s.sentence_silence_ms,
+                sources=self.sources,
             )
             self.state.pipeline = pipeline
             self.state.stage = "warmup"

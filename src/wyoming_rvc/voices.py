@@ -19,12 +19,13 @@ import logging
 import re
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from .config import F0_METHODS, ConfigError, Settings
+from .config import F0_METHODS, SOURCES, ConfigError, Settings, piper_voice_language
 from .metrics import now_ms
+from .model_loader import PIPER_VOICE_PATTERN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,11 +44,59 @@ _VOICE_KEYS = {
     "index_rate",
     "protect",
     "f0_method",
+    # Per-voice TTS source (all optional; a voice without any of these uses the global source).
+    "source",
+    "piper_voice",
+    "piper_model",
+    "piper_config",
+    "piper_speaker_id",
+    "piper_length_scale",
+    "piper_noise_scale",
+    "piper_noise_w_scale",
+    "upstream",
+    "upstream_voice",
+    "upstream_speaker",
 }
+_PIPER_KEYS = (
+    "piper_voice",
+    "piper_model",
+    "piper_config",
+    "piper_speaker_id",
+    "piper_length_scale",
+    "piper_noise_scale",
+    "piper_noise_w_scale",
+)
+_UPSTREAM_KEYS = ("upstream", "upstream_voice", "upstream_speaker")
 
 
 class UnknownVoiceError(ValueError):
     """The requested voice is not configured, not enabled, or not installed."""
+
+
+@dataclass(frozen=True)
+class SourceSpec:
+    """Where one voice's source audio comes from (``None`` fields inherit the global settings).
+
+    Hashable on purpose: ``SourceRegistry`` shares one loaded source between voices with equal specs.
+    """
+
+    kind: str  # "piper" | "wyoming"
+    piper_voice: str | None = None
+    piper_model: str | None = None
+    piper_config: str | None = None
+    piper_speaker_id: int | None = None
+    piper_length_scale: float | None = None
+    piper_noise_scale: float | None = None
+    piper_noise_w_scale: float | None = None
+    upstream: str | None = None
+    upstream_voice: str | None = None
+    upstream_speaker: str | None = None
+
+    def describe(self) -> str:
+        if self.kind == "wyoming":
+            target = self.upstream or "default-upstream"
+            return f"wyoming:{target}" + (f"/{self.upstream_voice}" if self.upstream_voice else "")
+        return f"piper:{self.piper_model or self.piper_voice or 'default'}"
 
 
 @dataclass(frozen=True)
@@ -65,6 +114,7 @@ class VoiceConfig:
     index_rate: float = 0.6
     protect: float = 0.33
     f0_method: str = "rmvpe"
+    source: SourceSpec | None = None  # None: the global source (SOURCE / PIPER_VOICE / WYOMING_UPSTREAM)
 
 
 # Served when there is no voices file and the RVC_* voice was not customized, so a fresh
@@ -173,6 +223,7 @@ def _voice(vid: str, raw: Any, settings: Settings, source: str) -> VoiceConfig:
             raise ConfigError(f"{where}: {key} must be {kind.__name__}")
         return value
 
+    source = _source_spec(raw, get, settings, where)
     model_file = get("model_file", str, None)
     repo_id = get("repo_id", str, "")
     if not repo_id and not (model_file and Path(model_file).is_absolute()):
@@ -180,7 +231,7 @@ def _voice(vid: str, raw: Any, settings: Settings, source: str) -> VoiceConfig:
     voice = VoiceConfig(
         id=vid,
         name=get("name", str, vid),
-        language=get("language", str, settings.voice_language),
+        language=get("language", str, _source_language(source, settings.voice_language)),
         repo_id=repo_id,
         enabled=get("enabled", bool, True),
         preload=get("preload", bool, False),
@@ -191,6 +242,7 @@ def _voice(vid: str, raw: Any, settings: Settings, source: str) -> VoiceConfig:
         index_rate=get("index_rate", float, settings.rvc_index_rate),
         protect=get("protect", float, settings.rvc_protect),
         f0_method=get("f0_method", str, settings.rvc_f0_method),
+        source=source,
     )
     if not -24 <= voice.pitch <= 24:
         raise ConfigError(f"{where}: pitch must be within [-24, 24]")
@@ -201,6 +253,85 @@ def _voice(vid: str, raw: Any, settings: Settings, source: str) -> VoiceConfig:
     if voice.f0_method not in F0_METHODS:
         raise ConfigError(f"{where}: f0_method must be one of {', '.join(F0_METHODS)}")
     return voice
+
+
+def _source_language(spec: SourceSpec | None, default: str) -> str:
+    """A named Piper voice implies its language (``en_GB-...`` -> ``en``), like the global PIPER_VOICE."""
+    if spec is not None and spec.kind == "piper" and spec.piper_voice:
+        return piper_voice_language(spec.piper_voice) or default
+    return default
+
+
+def _source_spec(raw: dict, get: Callable[[str, type, Any], Any], settings: Settings, where: str) -> SourceSpec | None:
+    """Parse the per-voice source keys; ``None`` when the voice uses the global source."""
+    kind = get("source", str, None)
+    if kind is not None and kind not in SOURCES:
+        raise ConfigError(f"{where}: source must be one of {', '.join(SOURCES)}; got {kind!r}")
+    has_piper = any(raw.get(k) is not None for k in _PIPER_KEYS)
+    has_upstream = any(raw.get(k) is not None for k in _UPSTREAM_KEYS)
+    if has_piper and has_upstream:
+        raise ConfigError(f"{where}: piper_* and upstream* keys cannot be mixed")
+    if kind is None:
+        if has_piper:
+            kind = "piper"
+        elif has_upstream:
+            kind = "wyoming"
+        else:
+            return None
+    if kind == "piper" and has_upstream:
+        raise ConfigError(f"{where}: source 'piper' does not take upstream* keys")
+    if kind == "wyoming" and has_piper:
+        raise ConfigError(f"{where}: source 'wyoming' does not take piper_* keys")
+
+    if kind == "wyoming":
+        upstream = get("upstream", str, None)
+        if not (upstream or settings.wyoming_upstream):
+            raise ConfigError(f"{where}: source 'wyoming' needs 'upstream: tcp://host:port' (or WYOMING_UPSTREAM)")
+        try:
+            replace(settings, wyoming_upstream=upstream or settings.wyoming_upstream).upstream_address()
+        except ConfigError as err:
+            raise ConfigError(f"{where}: {err}") from err
+        return SourceSpec(
+            kind="wyoming",
+            upstream=upstream,
+            upstream_voice=get("upstream_voice", str, None),
+            upstream_speaker=get("upstream_speaker", str, None),
+        )
+
+    piper_voice = get("piper_voice", str, None)
+    piper_model = get("piper_model", str, None)
+    piper_config = get("piper_config", str, None)
+    if piper_voice and piper_model:
+        raise ConfigError(f"{where}: set piper_voice or piper_model, not both")
+    if piper_config and not piper_model:
+        raise ConfigError(f"{where}: piper_config requires piper_model")
+    if piper_voice and not PIPER_VOICE_PATTERN.match(piper_voice):
+        raise ConfigError(
+            f"{where}: piper_voice {piper_voice!r} does not look like '<lang>_<REGION>-<name>-<quality>', "
+            "e.g. en_GB-northern_english_male-medium"
+        )
+    speaker = get("piper_speaker_id", int, None)
+    length = get("piper_length_scale", float, None)
+    noise = get("piper_noise_scale", float, None)
+    noise_w = get("piper_noise_w_scale", float, None)
+    for key, value, lo, hi in (
+        ("piper_speaker_id", speaker, 0, None),
+        ("piper_length_scale", length, 0.1, 5.0),
+        ("piper_noise_scale", noise, 0.0, 2.0),
+        ("piper_noise_w_scale", noise_w, 0.0, 2.0),
+    ):
+        if value is not None and ((lo is not None and value < lo) or (hi is not None and value > hi)):
+            raise ConfigError(f"{where}: {key} must be within [{lo}, {hi if hi is not None else 'inf'}]")
+    return SourceSpec(
+        kind="piper",
+        piper_voice=piper_voice,
+        piper_model=piper_model,
+        piper_config=piper_config,
+        piper_speaker_id=speaker,
+        piper_length_scale=length,
+        piper_noise_scale=noise,
+        piper_noise_w_scale=noise_w,
+    )
 
 
 def _check_default(default: str | None, voices: list[VoiceConfig]) -> None:
@@ -319,6 +450,7 @@ class VoiceManager:
                 "loaded": self.is_loaded(vid),
                 "default": vid == self.default_voice,
                 "sample_rate": s.sample_rate,
+                "source": s.config.source.describe() if s.config.source else "default",
                 "error": s.error,
             }
             for vid, s in self._states.items()

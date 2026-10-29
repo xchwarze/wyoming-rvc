@@ -16,7 +16,7 @@ import contextlib
 import logging
 from collections.abc import AsyncIterator, Callable, Iterator
 from dataclasses import dataclass, replace
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 
@@ -24,6 +24,9 @@ from .audio import float_to_pcm16, prevent_clipping, silence
 from .config import F0_METHODS, RVC_MODES, Settings
 from .metrics import Stopwatch, SynthesisMetrics, now_ms
 from .voices import VoiceConfig, VoiceManager
+
+if TYPE_CHECKING:
+    from .sources import SourceRegistry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -130,8 +133,10 @@ class TtsPipeline:
         defaults: SynthesisOptions,
         rvc_concurrency: int = 1,
         sentence_silence_ms: int = 0,
+        sources: SourceRegistry | None = None,
     ) -> None:
-        self.source = source
+        self.source = source  # the global source; voices may name their own (see ``sources``)
+        self.sources = sources
         # A bare engine is served as a single voice.
         self.voices = rvc if (rvc is None or isinstance(rvc, VoiceManager)) else VoiceManager.single(rvc)
         self.defaults = defaults.validate()
@@ -171,7 +176,8 @@ class TtsPipeline:
         use_rvc = options.rvc and self.voices is not None
         whole = use_rvc and options.mode == "whole"
         out_rate = self.sample_rate(options)
-        in_rate = self.source.sample_rate
+        source = await self._source_for(options) if use_rvc else self.source
+        in_rate = source.sample_rate
         metrics.text_chars = len(text)
         metrics.mode = options.mode if use_rvc else "tts-only"
         metrics.rvc = use_rvc
@@ -190,7 +196,7 @@ class TtsPipeline:
             if metrics.ttfa_ms is None:
                 metrics.ttfa_ms = now_ms() - start
 
-        sentences = self._sentences(text, gap, source_sw, metrics)
+        sentences = self._sentences(source, text, gap, source_sw, metrics)
         try:
             if not use_rvc:
                 async for audio in sentences:
@@ -227,11 +233,21 @@ class TtsPipeline:
 
     # ------------------------------------------------------------------ helpers
 
+    async def _source_for(self, options: SynthesisOptions) -> SourceLike:
+        """The TTS source for the request's voice: its own (loaded on first use) or the global one."""
+        if self.voices is None or self.sources is None:
+            return self.source
+        spec = self.voices.resolve(options.voice).config.source
+        if spec is None:
+            return self.source
+        # Loading a Piper voice / probing an upstream blocks: keep it off the event loop.
+        return await asyncio.to_thread(self.sources.get, spec)
+
     async def _sentences(
-        self, text: str, gap: np.ndarray, sw: Stopwatch, metrics: SynthesisMetrics
+        self, source: SourceLike, text: str, gap: np.ndarray, sw: Stopwatch, metrics: SynthesisMetrics
     ) -> AsyncIterator[np.ndarray]:
         """Source audio per sentence, with inter-sentence silence before all but the first."""
-        async with contextlib.aclosing(iterate_in_thread(self.source.sentences(text), sw)) as produced:
+        async with contextlib.aclosing(iterate_in_thread(source.sentences(text), sw)) as produced:
             async for audio in produced:
                 metrics.sentences += 1
                 if metrics.sentences > 1 and gap.size:

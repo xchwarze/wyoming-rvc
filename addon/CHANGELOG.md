@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- A voice in `voices.yaml` can use its own TTS source: its own Piper voice (`piper_voice`, or
+  `piper_model`) or any Wyoming TTS (`upstream`). Voices without these keys work as before.
+
 ## 0.4.1
 
 - The voices are listed under the language of `piper_voice` (for example `es` for
