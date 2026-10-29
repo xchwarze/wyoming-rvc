@@ -48,6 +48,9 @@ text ─► TTS source ─► RVC voice layer ─► PCM 16-bit ─► Wyoming �
 * Linux with Docker and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html),
   **or** Windows 10/11 with Docker Desktop on the WSL 2 backend (GPU support is built in).
 * About 7 GB of disk for the image, plus about 1 GB for models (downloaded on first start into `./models`).
+* **AMD instead:** a Radeon RX 6800/6900 (RDNA2), RX 7000 (RDNA3), RX 9000 (RDNA4) or a
+  Ryzen AI 300 / Max APU, on Linux with the in-kernel `amdgpu` driver, and the separate ROCm
+  image (about 15 GB). See [AMD GPUs (ROCm)](#amd-gpus-rocm).
 
 ## Quick start
 
@@ -92,6 +95,30 @@ docker compose exec wyoming-rvc python scripts/test_tts.py "Hi, I am Teto." -o /
 docker compose exec wyoming-rvc python scripts/test_tts.py "Hi, I am Teto." -o /models/teto.wav --wyoming
 ```
 
+### AMD GPUs (ROCm)
+
+A second image, `ghcr.io/xchwarze/wyoming-rvc-rocm`, runs RVC on AMD GPUs through the ROCm
+build of PyTorch (Linux only; no extra host software besides the kernel's `amdgpu` driver).
+It is built from the same Dockerfile with `--build-arg GPU=rocm`:
+
+```bash
+docker compose -f docker-compose.rocm.yml pull     # or: docker compose -f docker-compose.rocm.yml build
+docker compose -f docker-compose.rocm.yml up -d
+```
+
+```bash
+docker run -d --name wyoming-rvc --device /dev/kfd --device /dev/dri --group-add video \
+  --restart unless-stopped -p 127.0.0.1:8080:8080 -p 10200:10200 -v "$PWD/models:/models" \
+  ghcr.io/xchwarze/wyoming-rvc-rocm:latest
+```
+
+Everything else is the same, including `DEVICE=cuda`: the ROCm build of PyTorch serves the
+AMD GPU through the same device name. Piper runs on the CPU there (onnxruntime has no ROCm
+build in the image), which costs little: Piper is a small part of the work. Supported GPUs are
+those the PyTorch ROCm 7.2 wheels ship kernels for: gfx1030 (RX 6800/6900), gfx1100–1102
+(RX 7000), gfx1150/1151 (Ryzen AI APUs), gfx1200/1201 (RX 9000). Other RDNA2 cards
+(RX 6600/6700) usually work with `HSA_OVERRIDE_GFX_VERSION=10.3.0`.
+
 ## Home Assistant
 
 There are two ways to run it. With either one, Home Assistant talks to it through the
@@ -107,13 +134,14 @@ built-in **Wyoming Protocol** integration.
    under **Settings → Devices & Services**.
 
 The app is amd64 only. **Home Assistant OS does not give apps access to NVIDIA GPUs**, so
-there it runs on the CPU (`device: auto`), which works but is noticeably slower. The
-app's Documentation tab lists its options.
+there it runs on the CPU (`device: auto`), which works but is noticeably slower. AMD GPUs
+are out of reach too: the Home Assistant OS kernel has no ROCm compute driver (`/dev/kfd`).
+The app's Documentation tab lists its options.
 
 ### Option B: Docker on a GPU machine (lowest latency)
 
-Run the image as shown in [Quick start](#quick-start) on a machine with an NVIDIA GPU,
-then add it to Home Assistant. No custom component, REST command, or shell command is
+Run the image as shown in [Quick start](#quick-start) on a machine with an NVIDIA GPU
+(or an AMD one with the [ROCm image](#amd-gpus-rocm)), then add it to Home Assistant. No custom component, REST command, or shell command is
 needed:
 
 1. **Settings → Devices & Services → Add Integration → Wyoming Protocol**
@@ -342,14 +370,14 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DEVICE` | `cuda` | Device for RVC: `cuda` (refuses to start without a usable GPU), `cpu`, or `auto` (CUDA when available, otherwise CPU; the add-on default) |
+| `DEVICE` | `cuda` | Device for RVC: `cuda` (refuses to start without a usable GPU; also the AMD GPU in the ROCm image), `cpu`, or `auto` (the GPU when available, otherwise CPU; the add-on default) |
 | `SOURCE` | `piper` | `piper` (in-process) or `wyoming` (upstream Wyoming TTS) |
 | `WYOMING_UPSTREAM` | – | `tcp://host:port` of the upstream TTS (required when `SOURCE=wyoming`) |
 | `UPSTREAM_VOICE` / `UPSTREAM_SPEAKER` | upstream default | Voice/speaker requested from the upstream |
 | `UPSTREAM_TIMEOUT_S` | `30` | Connect/read timeout for the upstream |
 | `PIPER_VOICE` | `en_US-ljspeech-high` | Any [Piper voice](https://huggingface.co/rhasspy/piper-voices), downloaded once to `/models/piper` |
 | `PIPER_MODEL` / `PIPER_CONFIG` | – | Explicit `.onnx` (and `.onnx.json`); overrides `PIPER_VOICE` |
-| `PIPER_DEVICE` | `auto` | `auto` (GPU when `DEVICE=cuda`), `cuda`, `cpu` |
+| `PIPER_DEVICE` | `auto` | `auto` (GPU when `DEVICE=cuda` and onnxruntime has CUDA; CPU in the ROCm image), `cuda`, `cpu` |
 | `PIPER_LENGTH_SCALE`, `PIPER_NOISE_SCALE`, `PIPER_NOISE_W_SCALE`, `PIPER_SPEAKER_ID` | voice defaults | Piper synthesis options |
 | `SENTENCE_SILENCE_MS` | `0` | Silence inserted between sentences (any source, also between the sentences of a streamed Home Assistant response) |
 | `RVC_ENABLED` | `true` | `false` passes the source audio through unchanged |
@@ -487,19 +515,20 @@ WYOMING_RVC_HOST=127.0.0.1 WYOMING_RVC_PORT=10200 WYOMING_RVC_HA_OUT=./ha-out py
 ```
 
 `WYOMING_RVC_HA_OUT` keeps the audio that Home Assistant produced, so you can listen to it.
-The command to regenerate `requirements.lock` is in the header of `requirements.in`.
-CI (`.github/workflows/docker.yml`) runs the unit tests, builds the image, pushes it to
-GHCR (not for pull requests), and smoke-tests the pushed image.
+The command to regenerate `requirements.lock` is in the header of `requirements.in`, and the
+one for the ROCm image's `requirements-rocm.lock` in `requirements-rocm.in`.
+CI (`.github/workflows/docker.yml`) runs the unit tests, builds both images (NVIDIA and AMD
+ROCm), pushes them to GHCR (not for pull requests), and smoke-tests the pushed images.
 
 **Releases.** List the changes under `## Unreleased` in `addon/CHANGELOG.md`, then:
 
 ```bash
 python scripts/release.py 0.5.1 "short summary"   # sets the version in all four places, commits, tags
-git push --atomic origin main v0.5.1               # the tag builds the versioned image
+git push --atomic origin main v0.5.1               # the tag builds the versioned images (NVIDIA, ROCm)
 ```
 
 Push both together: Home Assistant offers the add-on update as soon as `addon/config.yaml`
-changes on `main`, and the image it pulls is the one built from the tag. A unit test fails
+changes on `main`, and the image it pulls is the NVIDIA one built from the tag. A unit test fails
 if the four versions ever disagree.
 
 ## Troubleshooting
@@ -515,6 +544,12 @@ work first. If it doesn't: install the toolkit, run
 Check the `deploy.resources.reservations.devices` block (or `--gpus all`), the toolkit,
 and the driver. A warning `No native kernels for … (sm_XX)` means torch has to JIT
 its kernels for that GPU; if the CUDA check right after it fails, the GPU is not supported.
+
+**AMD (ROCm image).** `ls /dev/kfd /dev/dri` on the host must list both; otherwise the
+`amdgpu` driver is not loaded (or the kernel lacks ROCm support, as Home Assistant OS does).
+The container needs `--device /dev/kfd --device /dev/dri`. A warning `No native kernels
+for … (gfxNNNN)` means the PyTorch wheels have no kernels for that GPU: for RDNA2 cards set
+`HSA_OVERRIDE_GFX_VERSION=10.3.0`; older GPUs (RDNA1, Vega, Polaris) are not supported.
 
 **Out of VRAM.** The service needs about 1 GB resident and about 2.5 GB peak. Keep
 `RVC_CONCURRENCY=1`, set `PIPER_DEVICE=cpu`, and close other GPU applications.
@@ -561,7 +596,8 @@ shown above, or `scripts/test_tts.py`.
 
 * Only the `rmvpe` pitch extractor and ContentVec-based models; the RefineGAN vocoder is not supported.
 * Upstream sources must send 16-bit PCM (every known Wyoming TTS does).
-* x86-64 Linux image with NVIDIA only; the image is about 7 GB because the PyTorch wheels bundle the CUDA runtime.
+* x86-64 Linux images only. The NVIDIA image is about 7 GB because the PyTorch wheels bundle the CUDA runtime;
+  the AMD (ROCm) image is about 15 GB for the same reason, and runs Piper on the CPU.
 * Home Assistant interoperability is verified with HA's integration code in a test harness.
   Playback on a real speaker or satellite still needs a manual check.
 

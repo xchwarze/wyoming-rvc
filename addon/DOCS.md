@@ -21,8 +21,10 @@ a Piper voice in your assistant's language.
 - `device: auto` uses an NVIDIA GPU if the add-on can see one, otherwise the CPU.
   **Home Assistant OS does not give add-ons access to NVIDIA GPUs**, so on HA OS the
   add-on runs on the CPU. That works, but with noticeably higher latency than on a GPU.
+  AMD GPUs are not usable from the add-on either (the HA OS kernel has no ROCm driver).
 - For the lowest latency (about 200 ms to first audio), run the Docker image on a machine
-  with an NVIDIA GPU and add it to Home Assistant with **Wyoming Protocol → host:10200**.
+  with an NVIDIA GPU (or the ROCm image on a Linux machine with an AMD GPU) and add it to
+  Home Assistant with **Wyoming Protocol → host:10200**.
   See the [project README](https://github.com/xchwarze/wyoming-rvc).
 
 ## Options

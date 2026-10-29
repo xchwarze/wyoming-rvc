@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Docker only: a second image, `ghcr.io/xchwarze/wyoming-rvc-rocm`, runs RVC on AMD GPUs
+  (ROCm, Linux). The add-on is unchanged: Home Assistant OS has no ROCm driver.
+- `PIPER_DEVICE=auto` runs Piper on the CPU when onnxruntime has no CUDA support (as in the
+  ROCm image) instead of failing at startup.
+
 ## 0.5.1
 
 - `SENTENCE_SILENCE_MS` also applies between the sentences of a streamed reply (what Home

@@ -2,6 +2,7 @@
 !Dockerfile
 !pyproject.toml
 !requirements.lock
+!requirements-rocm.lock
 !requirements-onnxruntime-gpu.lock
 !README.md
 !LICENSE

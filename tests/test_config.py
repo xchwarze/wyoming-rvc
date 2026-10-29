@@ -107,6 +107,19 @@ def test_device_auto_resolution():
     assert resolve_device(explicit, lambda: True) is explicit
 
 
+def test_piper_device_auto_needs_onnxruntime_cuda():
+    from wyoming_rvc.main import resolve_piper_device
+
+    gpu = Settings.from_env({"DEVICE": "cuda"})
+    assert resolve_piper_device(gpu, lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"]) is gpu
+    amd = resolve_piper_device(gpu, lambda: ["CPUExecutionProvider"])  # the ROCm image: RVC on the GPU, Piper on CPU
+    assert (amd.device, amd.piper_use_cuda) == ("cuda", False)
+    explicit = Settings.from_env({"DEVICE": "cuda", "PIPER_DEVICE": "cuda"})
+    assert resolve_piper_device(explicit, lambda: []) is explicit
+    on_cpu = Settings.from_env({"DEVICE": "cpu"})
+    assert resolve_piper_device(on_cpu, lambda: []) is on_cpu
+
+
 def test_voice_language_follows_the_piper_voice():
     assert Settings.from_env({"PIPER_VOICE": "es_MX-claude-high"}).voice_language == "es"
     assert Settings.from_env({"PIPER_VOICE": "es_MX-claude-high", "VOICE_LANGUAGE": "es-AR"}).voice_language == "es-AR"

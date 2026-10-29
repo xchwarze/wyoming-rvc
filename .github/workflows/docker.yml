@@ -43,8 +43,18 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - gpu: cuda # NVIDIA: ghcr.io/<owner>/wyoming-rvc
+            suffix: ""
+          - gpu: rocm # AMD: ghcr.io/<owner>/wyoming-rvc-rocm
+            suffix: "-rocm"
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}${{ matrix.suffix }}
     steps:
-      # The CUDA-enabled PyTorch layer is several GB; the default runner disk is tight.
+      # The GPU-enabled PyTorch layer is several GB (about 14 GB for ROCm); the default runner disk is tight.
       - name: Free disk space
         uses: jlumbroso/free-disk-space@v2.0.0
         with:
@@ -52,7 +62,7 @@ jobs:
           android: true
           dotnet: true
           haskell: true
-          large-packages: false
+          large-packages: ${{ matrix.gpu == 'rocm' }}
           docker-images: true
           swap-storage: true
 
@@ -71,7 +81,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
@@ -88,12 +98,18 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             BUILD_VERSION=${{ steps.meta.outputs.version }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
-          cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref=ghcr.io/{0}:buildcache,mode=max', github.repository) || '' }}
+            GPU=${{ matrix.gpu }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref={0}:buildcache,mode=max', env.IMAGE) || '' }}
+
+      # The smoke test pulls the pushed image; drop the local build state first so both fit on disk.
+      - name: Free build cache
+        if: github.event_name != 'pull_request'
+        run: docker buildx prune --all --force
 
       - name: Smoke test image (CPU, no models)
         if: github.event_name != 'pull_request'
         run: |
-          image="ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA::7}"
-          docker run --rm --entrypoint python "$image" -c "import wyoming_rvc.main, torch, piper, wyoming, faiss, transformers; print('imports ok', torch.__version__, torch.version.cuda)"
+          image="${IMAGE,,}:sha-${GITHUB_SHA::7}"
+          docker run --rm --entrypoint python "$image" -c "import wyoming_rvc.main, torch, piper, wyoming, faiss, transformers; print('imports ok', torch.__version__, torch.version.cuda or torch.version.hip)"
           docker run --rm --entrypoint python -e DEVICE=tpu "$image" -m wyoming_rvc.main && exit 1 || test $? -eq 2
