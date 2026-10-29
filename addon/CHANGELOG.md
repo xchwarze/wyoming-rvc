@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1
 
 - `SENTENCE_SILENCE_MS` also applies between the sentences of a streamed reply (what Home
   Assistant sends with streaming conversation agents); before, it was only applied inside
