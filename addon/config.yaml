@@ -37,7 +37,7 @@ options:
   voice_name: teto
   default_voice: ""
   rvc_max_loaded_models: 1
-  idle_sleep_s: 300
+  idle_sleep_s: 0
   log_level: INFO
 schema:
   device: list(auto|cuda|cpu)

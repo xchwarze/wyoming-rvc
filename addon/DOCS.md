@@ -42,7 +42,7 @@ a Piper voice in your assistant's language.
 | `voice_name` | `teto` | Voice id of your own single voice (changing it also replaces the built-in voices) |
 | `default_voice` | – | Voice used when Home Assistant names none (with `voices.yaml`) |
 | `rvc_max_loaded_models` | `1` | RVC voices kept in VRAM; the least recently used is unloaded |
-| `idle_sleep_s` | `300` | Seconds without a request before the models are unloaded to free VRAM (reloaded on the next request, a few seconds slower); `0` never sleeps |
+| `idle_sleep_s` | `0` | Seconds without a request before the models are unloaded to free VRAM (reloaded on the next request, a few seconds slower); `0` never sleeps, `300` is a good start |
 | `log_level` | `INFO` | Log verbosity |
 
 ## Several voices

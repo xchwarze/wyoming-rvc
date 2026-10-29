@@ -69,7 +69,7 @@ class Settings:
     rvc_max_loaded_models: int = 1
     voices_file: Path | None = None
     default_voice: str | None = None
-    idle_sleep_s: float = 300.0
+    idle_sleep_s: float = 0.0
 
     warmup_text: str = "System ready."
     max_text_chars: int = 5000
@@ -135,7 +135,7 @@ class Settings:
             rvc_max_loaded_models=r.int("RVC_MAX_LOADED_MODELS", 1, lo=1, hi=16),
             voices_file=r.opt_path("VOICES_FILE"),
             default_voice=r.opt_str("DEFAULT_VOICE"),
-            idle_sleep_s=r.float("IDLE_SLEEP_S", 300.0, lo=0.0, hi=86400.0),
+            idle_sleep_s=r.float("IDLE_SLEEP_S", 0.0, lo=0.0, hi=86400.0),
             warmup_text=r.str("WARMUP_TEXT", "System ready."),
             max_text_chars=r.int("MAX_TEXT_CHARS", 5000, lo=1, hi=100000),
             source=r.choice("SOURCE", "piper", SOURCES),

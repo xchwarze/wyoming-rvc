@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- New option `idle_sleep_s` (default 300 seconds, `0` = off): after that long without a request the models are unloaded to free VRAM, and reloaded by the next request, which is slower by the reload time.
+- New option `idle_sleep_s` (seconds; default `0` = off, `300` is a good start): after that long without a request the models are unloaded to free VRAM, and reloaded by the next request, which is slower by the reload time.
 
 ## 0.4.1
 

@@ -49,7 +49,7 @@ def manager() -> VoiceManager:
 # --------------------------------------------------------------------------- config
 
 
-@pytest.mark.parametrize("env,expected", [({}, 300.0), ({"IDLE_SLEEP_S": "0"}, 0.0), ({"IDLE_SLEEP_S": "90"}, 90.0)])
+@pytest.mark.parametrize("env,expected", [({}, 0.0), ({"IDLE_SLEEP_S": "0"}, 0.0), ({"IDLE_SLEEP_S": "90"}, 90.0)])
 def test_idle_sleep_setting(env, expected):
     assert Settings.from_env(env).idle_sleep_s == expected
 
