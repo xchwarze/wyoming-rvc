@@ -28,7 +28,7 @@ from wyoming.server import AsyncEventHandler, AsyncTcpServer
 from wyoming.tts import Synthesize, SynthesizeChunk, SynthesizeStart, SynthesizeStop, SynthesizeStopped
 
 from . import PROJECT_URL, __version__
-from .audio import iter_pcm_chunks
+from .audio import float_to_pcm16, iter_pcm_chunks, silence
 from .config import Settings
 from .http_server import ServiceState
 from .metrics import SynthesisMetrics
@@ -84,6 +84,7 @@ class RvcEventHandler(AsyncEventHandler):
         self._settings = settings
         self._streaming = False
         self._stream_voice: str | None = None
+        self._stream_sentences = 0
         self._sbd = SentenceBoundaryDetector()
 
     async def handle_event(self, event: Event) -> bool:
@@ -107,18 +108,19 @@ class RvcEventHandler(AsyncEventHandler):
                 self._stream_voice = _voice_id(start.voice)
                 self._pipeline().options(voice=self._stream_voice)  # unknown voice -> error now
                 self._streaming = True
+                self._stream_sentences = 0
                 self._sbd = SentenceBoundaryDetector()
                 return True
 
             if SynthesizeChunk.is_type(event.type) and self._streaming:
                 for sentence in self._sbd.add_chunk(SynthesizeChunk.from_event(event).text):
-                    await self._speak(sentence, "wyoming-stream", self._stream_voice)
+                    await self._speak_streamed(sentence)
                 return True
 
             if SynthesizeStop.is_type(event.type) and self._streaming:
                 remaining = self._sbd.finish()
                 if remaining.strip():
-                    await self._speak(remaining, "wyoming-stream", self._stream_voice)
+                    await self._speak_streamed(remaining)
                 await self.write_event(SynthesizeStopped().event())
                 self._streaming = False
                 return True
@@ -139,25 +141,38 @@ class RvcEventHandler(AsyncEventHandler):
             raise RuntimeError(f"Service not ready (stage={self._state.stage})")
         return pipeline
 
-    async def _speak(self, raw_text: str, source: str, voice: str | None) -> None:
+    async def _speak_streamed(self, sentence: str) -> None:
+        """One sentence of a streamed response. Each is its own pipeline call, so the
+        SENTENCE_SILENCE_MS gap the pipeline puts between sentences is added here."""
+        gap_ms = self._settings.sentence_silence_ms if self._stream_sentences else 0
+        await self._speak(sentence, "wyoming-stream", self._stream_voice, gap_ms)
+        if sentence.strip():
+            self._stream_sentences += 1
+
+    async def _speak(self, raw_text: str, source: str, voice: str | None, lead_silence_ms: int = 0) -> None:
         """Synthesize one utterance and send audio-start / chunks / audio-stop."""
         pipeline = self._pipeline()
         text = " ".join(raw_text.split())
+        if len(text) > self._state.max_text_chars:
+            raise ValueError(f"text longer than {self._state.max_text_chars} characters (MAX_TEXT_CHARS)")
         options = pipeline.options(voice=voice)  # UnknownVoiceError -> Wyoming error event
         rate = pipeline.sample_rate(options)
 
         await self.write_event(AudioStart(rate=rate, width=WIDTH, channels=CHANNELS).event())
         if text:
+            if lead_silence_ms:
+                await self._write_audio(float_to_pcm16(silence(rate, lead_silence_ms)), rate)
             metrics = SynthesisMetrics()
-            spc = self._settings.wyoming_samples_per_chunk
             # aclosing: a failed write must release the source and RVC slot right away, not at GC.
             async with contextlib.aclosing(pipeline.stream(text, options, metrics)) as pcm_stream:
                 async for pcm in pcm_stream:
-                    for chunk in iter_pcm_chunks(pcm, spc, WIDTH, CHANNELS):
-                        event = AudioChunk(rate=rate, width=WIDTH, channels=CHANNELS, audio=chunk).event()
-                        await self.write_event(event)
+                    await self._write_audio(pcm, rate)
             metrics.log(_LOGGER, source)
         await self.write_event(AudioStop().event())
+
+    async def _write_audio(self, pcm: bytes, rate: int) -> None:
+        for chunk in iter_pcm_chunks(pcm, self._settings.wyoming_samples_per_chunk, WIDTH, CHANNELS):
+            await self.write_event(AudioChunk(rate=rate, width=WIDTH, channels=CHANNELS, audio=chunk).event())
 
 
 class WyomingService:
