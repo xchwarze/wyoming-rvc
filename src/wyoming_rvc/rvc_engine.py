@@ -57,11 +57,19 @@ def _cuda_device(device: str) -> str:
 class SharedModels:
     """ContentVec, RMVPE and the input filter: loaded once, used by every voice."""
 
-    def __init__(self, device: str, assets: RvcAssets) -> None:
+    def __init__(self, device: str, assets: RvcAssets, half: bool = False) -> None:
         import torch
         from scipy import signal
 
         self.device = _cuda_device(device)
+        on_gpu = self.device.startswith("cuda")
+        if half and not on_gpu:
+            _LOGGER.warning("RVC_HALF ignored: fp16 is only used on the GPU (DEVICE=%s)", device)
+        # RVC_HALF: fp16 for ContentVec and every voice's generator. RMVPE (pitch) and the
+        # retrieval distances stay fp32: both are sensitive to precision and cheap.
+        self.dtype = torch.float16 if half and on_gpu else torch.float32
+        if self.dtype == torch.float16:
+            _LOGGER.info("RVC_HALF: ContentVec and the RVC generators run in fp16")
         if self.device.startswith("cuda"):
             # PyTorch's default, pinned explicitly: TF32 would perturb the retrieval
             # distances, which are weighted by 1/d^2 (nearest neighbours dominate).
@@ -107,7 +115,7 @@ class SharedModels:
             model = HubertModelWithFinalProj.from_pretrained(str(contentvec_dir))
         except Exception as err:
             raise RvcLoadError(f"Could not load ContentVec from {contentvec_dir}: {err}") from err
-        return model.to(self.device).float().eval()
+        return model.to(self.device, dtype=self.dtype).eval()
 
 
 def load_checkpoint(path: Path) -> dict:
@@ -236,7 +244,7 @@ class RvcEngine:
         for module in net_g.modules():
             if parametrize.is_parametrized(module, "weight"):
                 parametrize.remove_parametrizations(module, "weight", leave_parametrized=True)
-        self._net_g = net_g.to(self.device).float().eval()
+        self._net_g = net_g.to(self.device, dtype=self.shared.dtype).eval()
 
     def _load_index(self, path: Path) -> int:
         import faiss
@@ -366,7 +374,7 @@ class RvcEngine:
         import torch
 
         with torch.inference_mode():
-            x = torch.from_numpy(np.ascontiguousarray(segment)).float().view(1, -1).to(self.device)
+            x = torch.from_numpy(np.ascontiguousarray(segment)).float().view(1, -1).to(self.device, self.shared.dtype)
             hubert = self.shared.hubert
             feats = hubert(x)["last_hidden_state"]
             if self._version == "v1":
@@ -400,7 +408,8 @@ class RvcEngine:
                 pitch = pitchf = None
             feats = feats[:, :p_len]
             lengths = torch.tensor([p_len], device=self.device).long()
-            y = self._net_g.infer(feats.float(), lengths, pitch, pitchf, self._sid)[0][0, 0]
+            # pitchf stays fp32: the NSF source casts its sine waves to the generator's dtype.
+            y = self._net_g.infer(feats.to(self.shared.dtype), lengths, pitch, pitchf, self._sid)[0][0, 0]
             return y.float().cpu().numpy()
 
     def _retrieve(self, feats, index_rate: float, block: int = 256):
@@ -411,7 +420,7 @@ class RvcEngine:
         """
         import torch
 
-        q = feats[0]
+        q = feats[0].float()  # the bank is fp32, also with RVC_HALF
         mixed = []
         for i in range(0, q.shape[0], block):
             qb = q[i : i + block]
@@ -421,7 +430,7 @@ class RvcEngine:
             weight = weight / weight.sum(dim=1, keepdim=True)
             mixed.append((self._bank[ix] * weight.unsqueeze(-1)).sum(dim=1))
         retrieved = torch.cat(mixed).unsqueeze(0)
-        return retrieved * index_rate + (1 - index_rate) * feats
+        return (retrieved * index_rate + (1 - index_rate) * q.unsqueeze(0)).to(feats.dtype)
 
 
 def gpu_memory_stats() -> dict[str, float]:

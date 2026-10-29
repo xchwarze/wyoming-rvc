@@ -105,6 +105,38 @@ async def test_streaming_like_home_assistant(server):
     assert audio_bytes // 2 == pytest.approx(2 * 0.25 * 32000, abs=100)
 
 
+@pytest.mark.parametrize("server", [{"env": {"SENTENCE_SILENCE_MS": "100"}}], indirect=True)
+async def test_streaming_puts_sentence_silence_between_sentences(server):
+    """Streamed sentences are separate pipeline calls; the gap must still be there (not before the first)."""
+    async with AsyncTcpClient("127.0.0.1", server) as client:
+        await client.write_event(SynthesizeStart(voice=SynthesizeVoice(name="teto")).event())
+        for piece in ["Hello, I am Teto. ", "How are you. ", "Fine."]:  # streamed as three sentences
+            await client.write_event(SynthesizeChunk(text=piece).event())
+        await client.write_event(SynthesizeStop().event())
+        segments: list[bytes] = []
+        while True:
+            event = await asyncio.wait_for(client.read_event(), timeout=5)
+            assert event is not None and not Error.is_type(event.type)
+            if AudioStart.is_type(event.type):
+                segments.append(b"")
+            elif AudioChunk.is_type(event.type):
+                segments[-1] += AudioChunk.from_event(event).audio
+            elif SynthesizeStopped.is_type(event.type):
+                break
+    assert len(segments) == 3
+    assert len(segments[0]) // 2 == pytest.approx(0.25 * 32000, abs=50)
+    for later in segments[1:]:
+        assert len(later) // 2 == pytest.approx((0.1 + 0.25) * 32000, abs=50)
+        assert not any(later[: 2 * 3200])  # the gap leads the sentence
+
+
+async def test_text_over_max_text_chars_is_an_error(server):
+    async with AsyncTcpClient("127.0.0.1", server) as client:
+        await client.write_event(Synthesize(text="a" * 5001).event())
+        event = await asyncio.wait_for(client.read_event(), timeout=5)
+    assert Error.is_type(event.type) and "MAX_TEXT_CHARS" in Error.from_event(event).text
+
+
 @pytest.mark.parametrize("server", [{"rvc": FakeRvc(fail=True)}], indirect=True)
 async def test_error_event_on_failure(server):
     async with AsyncTcpClient("127.0.0.1", server) as client:

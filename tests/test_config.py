@@ -89,6 +89,11 @@ def test_port_clash_detected_across_different_hosts():
         )
 
 
+def test_rvc_half_is_opt_in():
+    assert Settings.from_env({}).rvc_half is False
+    assert Settings.from_env({"RVC_HALF": "true"}).rvc_half is True
+
+
 def test_device_auto_resolution():
     from wyoming_rvc.main import resolve_device
 

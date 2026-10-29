@@ -379,7 +379,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `PIPER_MODEL` / `PIPER_CONFIG` | – | Explicit `.onnx` (and `.onnx.json`); overrides `PIPER_VOICE` |
 | `PIPER_DEVICE` | `auto` | `auto` (GPU when `DEVICE=cuda` and onnxruntime has CUDA; CPU in the ROCm image), `cuda`, `cpu` |
 | `PIPER_LENGTH_SCALE`, `PIPER_NOISE_SCALE`, `PIPER_NOISE_W_SCALE`, `PIPER_SPEAKER_ID` | voice defaults | Piper synthesis options |
-| `SENTENCE_SILENCE_MS` | `0` | Silence inserted between sentences (any source) |
+| `SENTENCE_SILENCE_MS` | `0` | Silence inserted between sentences (any source, also between the sentences of a streamed Home Assistant response) |
 | `RVC_ENABLED` | `true` | `false` passes the source audio through unchanged |
 | `RVC_REPO_ID` | `Slichi/KasaneTeto` | Hugging Face repo with the RVC model (`.pth`, `.index`, or `.zip` archives) |
 | `RVC_REVISION` | `main` | Pin a repo commit |
@@ -390,6 +390,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `RVC_F0_METHOD` | `rmvpe` | Pitch extractor (only `rmvpe`) |
 | `RVC_MODE` | `sentence` | `sentence` (lowest time to first audio) or `whole` (lowest total time) |
 | `RVC_CONCURRENCY` | `1` | Simultaneous conversions on the same loaded models. At 1, extra requests wait in a queue; each extra slot adds peak activation memory. |
+| `RVC_HALF` | `false` | Experimental: ContentVec and the RVC generators in fp16 on the GPU (less VRAM, usually faster). RMVPE and the index retrieval stay fp32. Compare speed and sound with `scripts/benchmark.py` before keeping it; ignored on the CPU |
 | `RVC_ASSETS_REPO_ID` / `RVC_ASSETS_REVISION` | `IAHispano/Applio` / `main` | Source of ContentVec and RMVPE |
 | `VOICES_FILE` | `/config/voices.yaml` | Voice list. If the default path is missing: your `RVC_*` voice if you set one, otherwise the built-in Teto and Miku |
 | `DEFAULT_VOICE` | first enabled voice | Voice used when a request names none |
@@ -406,7 +407,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `MODELS_DIR` | `/models` | Root for downloads (`piper/`, `rvc/`, `huggingface/`, `cuda-cache/`) |
 | `HF_HOME` / `HF_TOKEN` | `$MODELS_DIR/huggingface` / – | Hugging Face cache and optional token (the CUDA JIT cache goes to `$MODELS_DIR/cuda-cache`) |
 | `WARMUP_TEXT` | `System ready.` | Synthesized and discarded at startup (use your voice's language) |
-| `MAX_TEXT_CHARS` | `5000` | HTTP request limit |
+| `MAX_TEXT_CHARS` | `5000` | Longest text per request: HTTP, Wyoming `synthesize`, and each sentence of a streamed response |
 | `LOG_LEVEL` / `LOG_FORMAT` | `INFO` / `text` | `LOG_FORMAT=json` gives structured logs |
 
 **Idle sleep.** Off by default. With `IDLE_SLEEP_S` above 0 (for example 300), a server with no request for that long unloads the RVC voices, ContentVec, RMVPE and the in-process Piper voices (the global one and those of `voices.yaml`), and reloads them when the next request arrives. That request is slower by the reload time (logged as `Models reloaded in … ms`). The service stays ready (`/readyz`) while asleep, and `/info` shows an `idle_sleep` block. It frees GPU memory; most of the process's system RAM (the CUDA runtime) stays. With `SOURCE=wyoming` and `RVC_ENABLED=false` there is nothing to unload.
@@ -491,8 +492,11 @@ Design notes:
 
 ```bash
 pip install -r requirements-test.txt && pip install --no-deps -e .
-pytest                                   # 110 unit tests, no torch or downloads, ~3 s
+pytest                                   # unit tests, no torch or downloads, a few seconds
 ```
+
+With torch installed, `tests/test_rvc_precision.py` also runs (fp16 against fp32 on random
+weights, CPU is enough); without torch it is skipped.
 
 With real models (downloads about 1 GB on the first run; uses the GPU):
 
@@ -515,6 +519,17 @@ The command to regenerate `requirements.lock` is in the header of `requirements.
 one for the ROCm image's `requirements-rocm.lock` in `requirements-rocm.in`.
 CI (`.github/workflows/docker.yml`) runs the unit tests, builds both images (NVIDIA and AMD
 ROCm), pushes them to GHCR (not for pull requests), and smoke-tests the pushed images.
+
+**Releases.** List the changes under `## Unreleased` in `addon/CHANGELOG.md`, then:
+
+```bash
+python scripts/release.py 0.5.1 "short summary"   # sets the version in all four places, commits, tags
+git push --atomic origin main v0.5.1               # the tag builds the versioned images (NVIDIA, ROCm)
+```
+
+Push both together: Home Assistant offers the add-on update as soon as `addon/config.yaml`
+changes on `main`, and the image it pulls is the NVIDIA one built from the tag. A unit test fails
+if the four versions ever disagree.
 
 ## Troubleshooting
 

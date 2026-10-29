@@ -38,8 +38,13 @@ class SourceRegistry:
         self._default = default
         self.max_loaded = max_loaded or settings.source_max_loaded
         self._cache: OrderedDict[SourceSpec, Any] = OrderedDict()
-        self._lock = threading.Lock()  # guards _cache only
-        self._build_lock = threading.Lock()  # one load at a time (onnxruntime / espeak are not re-entrant-friendly)
+        self._lock = threading.Lock()  # guards _cache and _upstream_locks only
+        self._build_lock = (
+            threading.Lock()
+        )  # one Piper load at a time (onnxruntime / espeak are not re-entrant-friendly)
+        # Upstream probes wait on the network (up to UPSTREAM_TIMEOUT_S): one lock per upstream,
+        # so a slow one does not hold up loading the other voices.
+        self._upstream_locks: dict[SourceSpec, threading.Lock] = {}
 
     @property
     def default(self) -> Any:
@@ -71,7 +76,7 @@ class SourceRegistry:
             if source is not None:
                 self._cache.move_to_end(spec)
                 return source
-        with self._build_lock:
+        with self._lock_for(spec):
             with self._lock:  # another request may have loaded it while we waited
                 source = self._cache.get(spec)
                 if source is not None:
@@ -84,6 +89,12 @@ class SourceRegistry:
                     evicted, _ = self._cache.popitem(last=False)
                     _LOGGER.info("Unloading source %s (SOURCE_MAX_LOADED=%d)", evicted.describe(), self.max_loaded)
             return source
+
+    def _lock_for(self, spec: SourceSpec) -> threading.Lock:
+        if spec.kind != "wyoming":
+            return self._build_lock
+        with self._lock:
+            return self._upstream_locks.setdefault(spec, threading.Lock())
 
     def unload_all(self) -> list[SourceSpec]:
         """Drop the per-voice Piper voices (idle sleep); they load again on their next use.

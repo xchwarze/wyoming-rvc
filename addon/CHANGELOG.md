@@ -4,6 +4,19 @@
 
 - Docker only: a second image, `ghcr.io/xchwarze/wyoming-rvc-rocm`, runs RVC on AMD GPUs
   (ROCm, Linux). The add-on is unchanged: Home Assistant OS has no ROCm driver.
+- `PIPER_DEVICE=auto` runs Piper on the CPU when onnxruntime has no CUDA support (as in the
+  ROCm image) instead of failing at startup.
+
+## 0.5.1
+
+- `SENTENCE_SILENCE_MS` also applies between the sentences of a streamed reply (what Home
+  Assistant sends with streaming conversation agents); before, it was only applied inside
+  one request.
+- With an upstream Wyoming TTS, a sentence ending in "no." ("I said no.") is no longer
+  merged with the next one.
+- Wyoming requests longer than `MAX_TEXT_CHARS` (5000) get an error, like HTTP ones.
+- Docker: experimental `RVC_HALF=true` runs ContentVec and the RVC generators in fp16 on the
+  GPU (less VRAM, usually faster). Off by default.
 
 ## 0.5.0
 
