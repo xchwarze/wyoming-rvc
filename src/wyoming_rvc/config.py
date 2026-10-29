@@ -79,6 +79,7 @@ class Settings:
     upstream_voice: str | None = None
     upstream_speaker: str | None = None
     upstream_timeout_s: float = 30.0
+    source_max_loaded: int = 4
 
     program_name: str = "Wyoming RVC"
     voice_name: str = "teto"
@@ -143,6 +144,7 @@ class Settings:
             upstream_voice=r.opt_str("UPSTREAM_VOICE"),
             upstream_speaker=r.opt_str("UPSTREAM_SPEAKER"),
             upstream_timeout_s=r.float("UPSTREAM_TIMEOUT_S", 30.0, lo=1.0, hi=600.0),
+            source_max_loaded=r.int("SOURCE_MAX_LOADED", 4, lo=1, hi=32),
             program_name=r.str("WYOMING_PROGRAM_NAME", "Wyoming RVC"),
             voice_name=r.str("VOICE_NAME", "teto"),
             voice_language=r.opt_str("VOICE_LANGUAGE") or "",
@@ -273,10 +275,15 @@ class _Reader:
         return value
 
 
+def piper_voice_language(voice: str) -> str | None:
+    """Language of a named Piper voice (``es_MX-claude-high`` -> ``es``)."""
+    match = re.match(r"([a-z]{2,3})_[A-Z]{2}-", voice)
+    return match.group(1) if match else None
+
+
 def _piper_language(settings: Settings) -> str | None:
-    """Language of a named Piper voice (``es_MX-claude-high`` -> ``es``), so Home Assistant
-    lists the voices for assistants in that language without setting VOICE_LANGUAGE."""
+    """Language of the global Piper voice, so Home Assistant lists the voices for assistants
+    in that language without setting VOICE_LANGUAGE."""
     if settings.source != "piper" or settings.piper_model is not None:
         return None
-    match = re.match(r"([a-z]{2,3})_[A-Z]{2}-", settings.piper_voice)
-    return match.group(1) if match else None
+    return piper_voice_language(settings.piper_voice)

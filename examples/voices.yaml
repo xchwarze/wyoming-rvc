@@ -9,6 +9,16 @@
 #   pitch (-24..24), index_rate (0..1), protect (0..0.5), f0_method (rmvpe),
 #   enabled (default true), preload (load at startup; if no voice sets it, the default voice is)
 # Missing values fall back to the RVC_* / VOICE_LANGUAGE environment variables.
+#
+# Each voice may also pick its own TTS source (all optional; without them the voice uses the
+# global SOURCE / PIPER_VOICE / WYOMING_UPSTREAM):
+#   Piper (in-process):  piper_voice | piper_model (+ piper_config), piper_speaker_id,
+#                        piper_length_scale, piper_noise_scale, piper_noise_w_scale
+#   Any Wyoming TTS:     upstream (tcp://host:port; default: the global WYOMING_UPSTREAM),
+#                        upstream_voice, upstream_speaker
+#   source: piper|wyoming is inferred from the keys; set it only to reuse the global Piper
+#   voice / upstream with different options. Do not mix piper_* and upstream* keys.
+# A named piper_voice also sets the voice's language (en_GB-... -> en) unless 'language' is set.
 # Voice ids are lowercase (a-z 0-9 _ -); quote ids like "on" or "no", which YAML reads as booleans.
 
 voices:
@@ -42,3 +52,20 @@ voices:
   #   name: "Local Voice"
   #   model_file: "/models/my/voice.pth"
   #   index_file: "/models/my/voice.index"
+
+  # Own Piper voice (male British English) feeding a local RVC model.
+  # jarvis:
+  #   name: "Jarvis"
+  #   language: "en"
+  #   piper_voice: en_GB-northern_english_male-medium
+  #   model_file: "/config/models/jarvis/model.pth"
+  #   index_file: "/config/models/jarvis/model.index"
+  #   pitch: -6
+  #   index_rate: 0.6
+  #   protect: 0.33
+
+  # Own upstream TTS (any Wyoming server) for this voice only.
+  # kokoro_miku:
+  #   repo_id: "binant/Hatsune_Miku__RVC_v2_"
+  #   upstream: "tcp://kokoro:10200"
+  #   upstream_voice: "af_heart"

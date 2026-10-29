@@ -200,6 +200,36 @@ voice list once). The one difference from 0.2 is that a request naming another v
 `VOICE_NAME`) now fails instead of using the configured voice, so reselect the voice in
 Home Assistant.
 
+**A different TTS source per voice.** By default every voice is fed by the one global source
+(`SOURCE`, `PIPER_VOICE`, `WYOMING_UPSTREAM`). Add source keys to a voice in `voices.yaml` to give
+it its own:
+
+```
+voices:
+  jarvis:
+    piper_voice: en_GB-northern_english_male-medium   # own in-process Piper voice
+    model_file: "/config/models/jarvis/model.pth"
+    index_file: "/config/models/jarvis/model.index"
+    pitch: -6
+  kokoro_miku:
+    repo_id: "binant/Hatsune_Miku__RVC_v2_"
+    upstream: "tcp://kokoro:10200"                    # any Wyoming TTS
+    upstream_voice: "af_heart"
+```
+
+Piper keys: `piper_voice` or `piper_model` (+ `piper_config`), `piper_speaker_id`,
+`piper_length_scale`, `piper_noise_scale`, `piper_noise_w_scale`. Wyoming keys: `upstream`
+(defaults to `WYOMING_UPSTREAM`), `upstream_voice`, `upstream_speaker`. Unset options fall back
+to the global ones. The source is picked from the keys, or set `source: piper|wyoming` to reuse
+the global Piper voice or upstream with different options. A named `piper_voice` also sets the
+voice's language unless you set `language`.
+
+Per-voice Piper voices are downloaded at startup but only loaded on first use; at most
+`SOURCE_MAX_LOADED` (default 4) stay resident, least recently used first. A voice whose files
+cannot be downloaded or whose upstream is unreachable is not offered (the others are). The
+global source is still loaded at startup, and with `RVC_ENABLED=false` per-voice sources are
+ignored.
+
 **Another Piper voice or language.** The default source voice is `en_US-ljspeech-high`
 (female, US English). Any voice from
 [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices) works, or your own model
@@ -337,6 +367,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `DEFAULT_VOICE` | first enabled voice | Voice used when a request names none |
 | `RVC_MAX_LOADED_MODELS` | `1` | RVC voices kept in VRAM (LRU). Each one costs the model plus its index, typically 100–400 MB |
 | `IDLE_SLEEP_S` | `0` | Seconds without a request before every model (RVC voices, ContentVec, RMVPE, in-process Piper) is unloaded to free VRAM; the next request reloads them. `0` never sleeps; `300` is a good start |
+| `SOURCE_MAX_LOADED` | `4` | Per-voice TTS sources (Piper voices, upstream connections from `voices.yaml`) kept loaded (LRU); the global source is never unloaded |
 | `VOICE_NAME` / `VOICE_LANGUAGE` | `teto` / from `PIPER_VOICE` | Voice id and language advertised to Home Assistant. The language defaults to the Piper voice's (`en` for other sources) |
 | `WYOMING_PROGRAM_NAME` | `Wyoming RVC` | Name shown in Home Assistant |
 | `WYOMING_HOST` / `WYOMING_PORT` | `0.0.0.0` / `10200` | Wyoming server |
