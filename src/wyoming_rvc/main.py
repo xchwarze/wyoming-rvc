@@ -53,14 +53,20 @@ def setup_logging(level: str, fmt: str) -> None:
 
 
 def report_torch(settings: Settings) -> dict[str, Any]:
-    """Log torch/CUDA facts; fail if CUDA was required but is missing."""
+    """Log torch/GPU facts; fail if a GPU was required but is missing.
+
+    The ROCm build (AMD) serves its GPU through the same ``torch.cuda`` API, so ``cuda`` below
+    covers both vendors.
+    """
     import torch
 
     cuda = torch.cuda.is_available()
+    rocm = torch.version.hip is not None
     facts: dict[str, Any] = {
         "torch": torch.__version__,
         "cuda_available": cuda,
         "cuda_runtime": torch.version.cuda,
+        "rocm_runtime": torch.version.hip,
         "cudnn": torch.backends.cudnn.version() if cuda else None,
         "gpu": torch.cuda.get_device_name(0) if cuda else None,
         "gpu_capability": ".".join(map(str, torch.cuda.get_device_capability(0))) if cuda else None,
@@ -70,10 +76,12 @@ def report_torch(settings: Settings) -> dict[str, Any]:
         "piper_device": ("cuda" if settings.piper_use_cuda else "cpu") if settings.source == "piper" else None,
     }
     _LOGGER.info(
-        "torch=%s cuda_available=%s cuda_runtime=%s gpu=%s capability=%s rvc_device=%s source=%s piper_device=%s",
+        "torch=%s cuda_available=%s cuda_runtime=%s rocm_runtime=%s gpu=%s capability=%s rvc_device=%s source=%s "
+        "piper_device=%s",
         facts["torch"],
         cuda,
         facts["cuda_runtime"],
+        facts["rocm_runtime"],
         facts["gpu"],
         facts["gpu_capability"],
         facts["rvc_device"],
@@ -83,19 +91,30 @@ def report_torch(settings: Settings) -> dict[str, Any]:
     )
     if settings.device == "cuda":
         if not cuda:
-            raise RuntimeError(
-                "DEVICE=cuda but torch.cuda.is_available() is False. Check the NVIDIA driver, the NVIDIA "
-                "Container Toolkit and that the container runs with GPU access (--gpus all). "
-                "Use DEVICE=cpu for debugging."
+            check = (
+                "Check the amdgpu driver and that the container gets /dev/kfd and /dev/dri "
+                "(--device /dev/kfd --device /dev/dri)."
+                if rocm
+                else "Check the NVIDIA driver, the NVIDIA Container Toolkit and that the container runs with "
+                "GPU access (--gpus all)."
             )
-        arch = f"sm_{''.join(map(str, torch.cuda.get_device_capability(0)))}"
+            raise RuntimeError(
+                f"DEVICE=cuda but torch.cuda.is_available() is False. {check} Use DEVICE=cpu for debugging."
+            )
+        if rocm:
+            arch = torch.cuda.get_device_properties(0).gcnArchName.split(":")[0]  # e.g. gfx1100
+            fallback = "set HSA_OVERRIDE_GFX_VERSION to a supported one (10.3.0 for RDNA2)"
+        else:
+            arch = f"sm_{''.join(map(str, torch.cuda.get_device_capability(0)))}"
+            fallback = "relying on PTX JIT"
         if arch not in torch.cuda.get_arch_list():
-            # Not fatal: torch may still run it through PTX JIT; the kernel launch below decides.
+            # Not fatal: CUDA may JIT it from PTX, ROCm may run it with an override; the kernel launch below decides.
             _LOGGER.warning(
-                "No native kernels for %s (%s) in this torch build %s; relying on PTX JIT",
+                "No native kernels for %s (%s) in this torch build %s; %s",
                 facts["gpu"],
                 arch,
                 torch.cuda.get_arch_list(),
+                fallback,
             )
         torch.zeros(1, device="cuda").sum().item()  # fail now, not on the first request
     return facts
@@ -135,6 +154,25 @@ def resolve_device(settings: Settings, cuda_available: Callable[[], bool]) -> Se
     device = "cuda" if cuda_available() else "cpu"
     _LOGGER.info("DEVICE=auto resolved to %s", device)
     return dataclasses.replace(settings, device=device)
+
+
+def resolve_piper_device(settings: Settings, onnx_providers: Callable[[], list[str]]) -> Settings:
+    """PIPER_DEVICE=auto follows DEVICE=cuda only when onnxruntime can run on CUDA.
+
+    The AMD (ROCm) image ships the CPU onnxruntime: there Piper runs on the CPU and RVC on the GPU.
+    """
+    if settings.piper_device != "auto" or settings.device != "cuda":
+        return settings
+    if "CUDAExecutionProvider" in onnx_providers():
+        return settings
+    _LOGGER.info("PIPER_DEVICE=auto resolved to cpu (onnxruntime has no CUDA provider)")
+    return dataclasses.replace(settings, piper_device="cpu")
+
+
+def _onnx_providers() -> list[str]:
+    import onnxruntime
+
+    return onnxruntime.get_available_providers()
 
 
 class Service:
@@ -422,6 +460,7 @@ def run() -> None:
             import torch
 
             settings = resolve_device(settings, torch.cuda.is_available)
+        settings = resolve_piper_device(settings, _onnx_providers)
         asyncio.run(Service(settings).run())
     except Exception:
         _LOGGER.exception("Fatal error after %.0f ms", now_ms() - started)

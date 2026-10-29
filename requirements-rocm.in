@@ -1,0 +1,9 @@
+# AMD GPU (ROCm) image: requirements.in with torch swapped for the ROCm build.
+# Regenerate requirements-rocm.lock from a copy of requirements.lock, so every other pin matches
+# the CUDA image (uv keeps the versions it finds in the output file):
+#   cp requirements.lock requirements-rocm.lock
+#   uv pip compile requirements.in --overrides requirements-rocm.in -o requirements-rocm.lock \
+#     --python-version 3.12 --python-platform x86_64-manylinux_2_28 --index-strategy unsafe-best-match \
+#     --extra-index-url https://download.pytorch.org/whl/rocm7.2 --emit-index-url --generate-hashes
+# ROCm 7.2 build: RDNA2 (gfx1030), RDNA3 (gfx110x), RDNA3.5 (gfx115x), RDNA4 (gfx120x), Instinct.
+torch==2.11.0+rocm7.2

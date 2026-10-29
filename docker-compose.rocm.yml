@@ -1,0 +1,31 @@
+# AMD GPUs (ROCm, Linux only): docker compose -f docker-compose.rocm.yml up -d
+# Same service as docker-compose.yml, with the ROCm image and the AMD GPU devices.
+services:
+  wyoming-rvc:
+    build:
+      context: .
+      args:
+        GPU: rocm
+    image: ghcr.io/xchwarze/wyoming-rvc-rocm:latest
+    ports:
+      - "127.0.0.1:8080:8080"   # HTTP debug API: no auth, local only (use "8080:8080" to expose it)
+      - "10200:10200" # Wyoming (Home Assistant)
+    volumes:
+      - ./models:/models
+      - ./config:/config   # optional voices.yaml for several voices
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - DEVICE=${DEVICE:-cuda}   # "cuda" is also the AMD GPU on the ROCm build of PyTorch
+      - RVC_REPO_ID=${RVC_REPO_ID:-Slichi/KasaneTeto}
+      - PIPER_VOICE=${PIPER_VOICE:-en_US-ljspeech-high}
+      # RDNA2 cards other than RX 6800/6900 (e.g. RX 6600/6700): present them as gfx1030.
+      # - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+    stop_grace_period: 30s
+    restart: unless-stopped
