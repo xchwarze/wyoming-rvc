@@ -67,6 +67,10 @@ Voices download at startup and load into VRAM on first use. After changing the v
 reload the Wyoming integration (**Settings → Devices & Services → Wyoming → ⋮ → Reload**). Switching to a voice that is
 not loaded adds one model load to that reply.
 
+A voice can also have its own TTS source instead of `piper_voice`: add
+`piper_voice: en_GB-northern_english_male-medium` for its own Piper voice, or
+`upstream: "tcp://host:10200"` for any Wyoming TTS. See the README for every key.
+
 Other settings from the README can be passed as environment variables when running
 the Docker image directly.
 

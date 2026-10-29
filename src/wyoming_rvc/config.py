@@ -273,10 +273,15 @@ class _Reader:
         return value
 
 
+def piper_voice_language(voice: str) -> str | None:
+    """Language of a named Piper voice (``es_MX-claude-high`` -> ``es``)."""
+    match = re.match(r"([a-z]{2,3})_[A-Z]{2}-", voice)
+    return match.group(1) if match else None
+
+
 def _piper_language(settings: Settings) -> str | None:
-    """Language of a named Piper voice (``es_MX-claude-high`` -> ``es``), so Home Assistant
-    lists the voices for assistants in that language without setting VOICE_LANGUAGE."""
+    """Language of the global Piper voice, so Home Assistant lists the voices for assistants
+    in that language without setting VOICE_LANGUAGE."""
     if settings.source != "piper" or settings.piper_model is not None:
         return None
-    match = re.match(r"([a-z]{2,3})_[A-Z]{2}-", settings.piper_voice)
-    return match.group(1) if match else None
+    return piper_voice_language(settings.piper_voice)

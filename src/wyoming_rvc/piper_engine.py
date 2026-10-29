@@ -12,6 +12,10 @@ import numpy as np
 
 _LOGGER = logging.getLogger(__name__)
 
+# espeak-ng phonemization is process-global, and voices may each load their own engine:
+# one lock serializes synthesis across all of them.
+_SYNTHESIS_LOCK = threading.Lock()
+
 
 @dataclass(frozen=True)
 class PiperOptions:
@@ -31,8 +35,7 @@ class PiperEngine:
         self.options = options
         self._voice = None
         self._syn_config = None
-        # espeak-ng phonemization is process-global; serialize synthesis.
-        self._lock = threading.Lock()
+        self._lock = _SYNTHESIS_LOCK
 
     def load(self) -> None:
         import onnxruntime

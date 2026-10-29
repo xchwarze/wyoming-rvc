@@ -165,3 +165,11 @@ async def test_pipeline_uses_the_voices_own_source(fake_piper):
     assert rvc.rates == [22050, 16000]  # global source for 'plain', jarvis's own Piper voice for 'jarvis'
     assert rvc.levels == [0.1, 0.4]
     assert tts_only.sample_rate == 22050  # without RVC the global source is used
+
+
+def test_piper_engines_share_one_synthesis_lock():
+    # espeak-ng is process-global: two voices' engines must not phonemize at the same time.
+    options = piper_engine.PiperOptions()
+    first = piper_engine.PiperEngine(Path("a.onnx"), Path("a.json"), options)
+    second = piper_engine.PiperEngine(Path("b.onnx"), Path("b.json"), options)
+    assert first._lock is second._lock

@@ -366,7 +366,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `VOICES_FILE` | `/config/voices.yaml` | Voice list. If the default path is missing: your `RVC_*` voice if you set one, otherwise the built-in Teto and Miku |
 | `DEFAULT_VOICE` | first enabled voice | Voice used when a request names none |
 | `RVC_MAX_LOADED_MODELS` | `1` | RVC voices kept in VRAM (LRU). Each one costs the model plus its index, typically 100–400 MB |
-| `SOURCE_MAX_LOADED`                                                                  | `4`                           | Per-voice TTS sources (Piper voices, upstream connections from `voices.yaml`) kept loaded (LRU); the global source is never unloaded      |
+| `SOURCE_MAX_LOADED` | `4` | Per-voice TTS sources (Piper voices, upstream connections from `voices.yaml`) kept loaded (LRU); the global source is never unloaded |
 | `VOICE_NAME` / `VOICE_LANGUAGE` | `teto` / from `PIPER_VOICE` | Voice id and language advertised to Home Assistant. The language defaults to the Piper voice's (`en` for other sources) |
 | `WYOMING_PROGRAM_NAME` | `Wyoming RVC` | Name shown in Home Assistant |
 | `WYOMING_HOST` / `WYOMING_PORT` | `0.0.0.0` / `10200` | Wyoming server |

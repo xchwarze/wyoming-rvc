@@ -23,7 +23,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from .config import F0_METHODS, SOURCES, ConfigError, Settings
+from .config import F0_METHODS, SOURCES, ConfigError, Settings, piper_voice_language
 from .metrics import now_ms
 from .model_loader import PIPER_VOICE_PATTERN
 
@@ -258,9 +258,7 @@ def _voice(vid: str, raw: Any, settings: Settings, source: str) -> VoiceConfig:
 def _source_language(spec: SourceSpec | None, default: str) -> str:
     """A named Piper voice implies its language (``en_GB-...`` -> ``en``), like the global PIPER_VOICE."""
     if spec is not None and spec.kind == "piper" and spec.piper_voice:
-        match = re.match(r"([a-z]{2,3})_[A-Z]{2}-", spec.piper_voice)
-        if match:
-            return match.group(1)
+        return piper_voice_language(spec.piper_voice) or default
     return default
 
 
