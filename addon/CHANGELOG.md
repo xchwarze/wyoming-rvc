@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
 
-- New option `idle_sleep_s` (seconds; default `0` = off, `300` is a good start): after that long without a request the models are unloaded to free VRAM, and reloaded by the next request, which is slower by the reload time.
+- New option `idle_sleep_s` (seconds; default `0` = off, `300` is a good start): after that
+  long without a request the models are unloaded to free VRAM, and reloaded by the next
+  request, which is slower by the reload time.
 - A voice in `voices.yaml` can use its own TTS source: its own Piper voice (`piper_voice`, or
   `piper_model`) or any Wyoming TTS (`upstream`). Voices without these keys work as before.
 - Docker only: a second image, `ghcr.io/xchwarze/wyoming-rvc-rocm`, runs RVC on AMD GPUs
