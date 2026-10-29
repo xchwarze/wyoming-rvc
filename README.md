@@ -381,7 +381,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `MAX_TEXT_CHARS` | `5000` | HTTP request limit |
 | `LOG_LEVEL` / `LOG_FORMAT` | `INFO` / `text` | `LOG_FORMAT=json` gives structured logs |
 
-**Idle sleep.** Off by default. With `IDLE_SLEEP_S` above 0 (for example 300), a server with no request for that long unloads the RVC voices, ContentVec, RMVPE and the in-process Piper voice, and reloads them when the next request arrives. That request is slower by the reload time (logged as `Models reloaded in … ms`). The service stays ready (`/readyz`) while asleep, and `/info` shows an `idle_sleep` block. It frees GPU memory; most of the process's system RAM (the CUDA runtime) stays. With `SOURCE=wyoming` and `RVC_ENABLED=false` there is nothing to unload.
+**Idle sleep.** Off by default. With `IDLE_SLEEP_S` above 0 (for example 300), a server with no request for that long unloads the RVC voices, ContentVec, RMVPE and the in-process Piper voices (the global one and those of `voices.yaml`), and reloads them when the next request arrives. That request is slower by the reload time (logged as `Models reloaded in … ms`). The service stays ready (`/readyz`) while asleep, and `/info` shows an `idle_sleep` block. It frees GPU memory; most of the process's system RAM (the CUDA runtime) stays. With `SOURCE=wyoming` and `RVC_ENABLED=false` there is nothing to unload.
 
 **Model resolution.** The RVC repo is snapshot-downloaded (only `*.pth`, `*.index`,
 `*.zip`) into `HF_HOME`. Zips are extracted once to `/models/rvc/<repo>/<archive>/`,

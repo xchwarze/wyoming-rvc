@@ -293,6 +293,8 @@ class Service:
         unload = getattr(self.source, "unload", None)  # only the in-process Piper holds a model
         if unload is not None:
             unload()
+        if self.sources is not None:
+            self.sources.unload_all()  # per-voice Piper voices reload on their next use
         release_memory()
 
     def _wake_blocking(self) -> None:  # idempotent: loads whatever is missing
