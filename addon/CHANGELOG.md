@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 
 - Docker only: a second image, `ghcr.io/xchwarze/wyoming-rvc-rocm`, runs RVC on AMD GPUs
   (ROCm, Linux). The add-on is unchanged: Home Assistant OS has no ROCm driver.
