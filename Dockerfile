@@ -29,10 +29,12 @@ RUN case "$GPU" in \
     esac \
     && /opt/venv/bin/pip install --require-hashes -r "$lock" \
     && if [ "$GPU" = cpu ]; then \
-      /opt/venv/bin/pip install --no-deps --require-hashes \
+      printf '%s\n' \
+        'torch==2.15.0+cpu --hash=sha256:0955c7e3446326293f48af18fad67872fa31dee5a36a87690eb9e5be8b465be3' \
+        > /tmp/requirements-torch-cpu.lock \
+      && /opt/venv/bin/pip install --no-deps --require-hashes \
         --index-url https://download.pytorch.org/whl/cpu \
-        "torch==2.15.0+cpu" \
-        --hash=sha256:0955c7e3446326293f48af18fad67872fa31dee5a36a87690eb9e5be8b465be3; \
+        -r /tmp/requirements-torch-cpu.lock; \
     fi
 COPY requirements-onnxruntime-gpu.lock /tmp/requirements-onnxruntime-gpu.lock
 # CUDA: swap the CPU-only onnxruntime for the CUDA 12 build (CPU stays the default).
