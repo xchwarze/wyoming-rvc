@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1
 
-# GPU=cuda (NVIDIA, the default) or GPU=rocm (AMD): docker build --build-arg GPU=rocm .
-# No CUDA/ROCm base image is needed: the PyTorch wheels ship their own GPU runtime
-# (CUDA 12.8 + cuDNN as pip packages, or ROCm 7.2 inside the torch wheel).
+# GPU=cuda (NVIDIA, the default), rocm (AMD), or cpu:
+# docker build --build-arg GPU=cpu -t wyoming-rvc-cpu .
+# No CUDA/ROCm base image is needed: the PyTorch wheels ship their own GPU runtime.
+# The CPU image removes those pinned GPU packages, then installs a CPU-only PyTorch wheel.
 # NVIDIA: the Container Toolkit injects the driver at run time (host driver >= 570).
 # AMD: the host's amdgpu driver, reached through /dev/kfd and /dev/dri.
 ARG PYTHON_IMAGE=python:3.12.14-slim-trixie
@@ -16,12 +17,23 @@ ENV PIP_NO_CACHE_DIR=1 \
 
 RUN python -m venv /opt/venv
 COPY requirements.lock requirements-rocm.lock /tmp/
+# The CPU index no longer serves a 2.11 CPU wheel; pin its current Linux amd64 CPU wheel.
 RUN case "$GPU" in \
       cuda) lock=/tmp/requirements.lock ;; \
       rocm) lock=/tmp/requirements-rocm.lock ;; \
-      *) echo "GPU must be cuda or rocm, got '$GPU'" >&2; exit 1 ;; \
+      cpu) \
+        awk '/^[^[:space:]]/ { skip = $1 ~ /^(cuda-|nvidia-|torch|triton)/ } !skip { print }' \
+          /tmp/requirements.lock > /tmp/requirements-cpu.lock \
+        && lock=/tmp/requirements-cpu.lock ;; \
+      *) echo "GPU must be cuda, rocm, or cpu, got '$GPU'" >&2; exit 1 ;; \
     esac \
-    && /opt/venv/bin/pip install --require-hashes -r "$lock"
+    && /opt/venv/bin/pip install --require-hashes -r "$lock" \
+    && if [ "$GPU" = cpu ]; then \
+      /opt/venv/bin/pip install --no-deps --require-hashes \
+        --index-url https://download.pytorch.org/whl/cpu \
+        "torch==2.15.0+cpu" \
+        --hash=sha256:0955c7e3446326293f48af18fad67872fa31dee5a36a87690eb9e5be8b465be3; \
+    fi
 COPY requirements-onnxruntime-gpu.lock /tmp/requirements-onnxruntime-gpu.lock
 # CUDA: swap the CPU-only onnxruntime for the CUDA 12 build (CPU stays the default).
 # ROCm: Piper keeps the CPU build (no ROCm onnxruntime wheel), so PIPER_DEVICE=auto means CPU.

@@ -47,6 +47,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - gpu: cpu # CPU-only: ghcr.io/<owner>/wyoming-rvc-cpu
+            suffix: "-cpu"
           - gpu: cuda # NVIDIA: ghcr.io/<owner>/wyoming-rvc
             suffix: ""
           - gpu: rocm # AMD: ghcr.io/<owner>/wyoming-rvc-rocm
