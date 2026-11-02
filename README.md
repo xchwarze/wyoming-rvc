@@ -375,6 +375,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `WYOMING_UPSTREAM` | – | `tcp://host:port` of the upstream TTS (required when `SOURCE=wyoming`) |
 | `UPSTREAM_VOICE` / `UPSTREAM_SPEAKER` | upstream default | Voice/speaker requested from the upstream |
 | `UPSTREAM_TIMEOUT_S` | `30` | Connect/read timeout for the upstream |
+| `PROBE_TEXT` | `Hello.` | Text synthesized at startup to validate an upstream Wyoming TTS and learn its sample rate |
 | `PIPER_VOICE` | `en_US-ljspeech-high` | Any [Piper voice](https://huggingface.co/rhasspy/piper-voices), downloaded once to `/models/piper` |
 | `PIPER_MODEL` / `PIPER_CONFIG` | – | Explicit `.onnx` (and `.onnx.json`); overrides `PIPER_VOICE` |
 | `PIPER_DEVICE` | `auto` | `auto` (GPU when `DEVICE=cuda` and onnxruntime has CUDA; CPU in the ROCm image), `cuda`, `cpu` |

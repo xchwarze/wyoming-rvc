@@ -29,6 +29,7 @@ def test_overrides_and_empty_values():
             "RVC_MODEL_FILE": "",
             "PIPER_DEVICE": "cuda",
             "MODELS_DIR": "/data",
+            "PROBE_TEXT": "Comprobación.",
         }
     )
     assert s.device == "cpu"
@@ -37,6 +38,7 @@ def test_overrides_and_empty_values():
     assert s.rvc_model_file is None
     assert s.piper_use_cuda is True
     assert s.piper_data_dir == Path("/data/piper") and s.hf_home == Path("/data/huggingface")
+    assert s.probe_text == "Comprobación."
 
 
 @pytest.mark.parametrize(

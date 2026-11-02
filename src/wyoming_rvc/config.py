@@ -80,6 +80,7 @@ class Settings:
     upstream_voice: str | None = None
     upstream_speaker: str | None = None
     upstream_timeout_s: float = 30.0
+    probe_text: str = "Hello."
     source_max_loaded: int = 4
 
     program_name: str = "Wyoming RVC"
@@ -146,6 +147,7 @@ class Settings:
             upstream_voice=r.opt_str("UPSTREAM_VOICE"),
             upstream_speaker=r.opt_str("UPSTREAM_SPEAKER"),
             upstream_timeout_s=r.float("UPSTREAM_TIMEOUT_S", 30.0, lo=1.0, hi=600.0),
+            probe_text=r.str("PROBE_TEXT", "Hello."),
             source_max_loaded=r.int("SOURCE_MAX_LOADED", 4, lo=1, hi=32),
             program_name=r.str("WYOMING_PROGRAM_NAME", "Wyoming RVC"),
             voice_name=r.str("VOICE_NAME", "teto"),

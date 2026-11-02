@@ -44,6 +44,21 @@ async def test_load_learns_program_and_rate(upstream):
     assert source.program == "Wyoming RVC"
 
 
+async def test_load_uses_configured_probe_text(upstream, monkeypatch):
+    source = WyomingSource("127.0.0.1", upstream, probe_text="Comprobación.")
+    synthesize = source._synthesize
+    texts: list[str] = []
+
+    def record_probe(stream, text):
+        texts.append(text)
+        return synthesize(stream, text)
+
+    monkeypatch.setattr(source, "_synthesize", record_probe)
+    await asyncio.to_thread(source.load)
+
+    assert texts == ["Comprobación."]
+
+
 async def test_sentences_one_audio_per_sentence(upstream):
     source = WyomingSource("127.0.0.1", upstream, voice="daniela")
     await asyncio.to_thread(source.load)

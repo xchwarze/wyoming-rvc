@@ -147,6 +147,7 @@ class SourceRegistry:
                 spec.upstream_voice if spec.upstream_voice else (None if spec.upstream else s.upstream_voice),
                 spec.upstream_speaker if spec.upstream_speaker else (None if spec.upstream else s.upstream_speaker),
                 s.upstream_timeout_s,
+                s.probe_text,
             )
             source.load()
             return source
