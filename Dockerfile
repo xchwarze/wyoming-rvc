@@ -3,42 +3,31 @@
 # GPU=cuda (NVIDIA, the default), rocm (AMD), or cpu:
 # docker build --build-arg GPU=cpu -t wyoming-rvc-cpu .
 # No CUDA/ROCm base image is needed: the PyTorch wheels ship their own GPU runtime.
-# The CPU image removes those pinned GPU packages, then installs a CPU-only PyTorch wheel.
+# The CPU image uses a separate lock with the CPU-only build of the same PyTorch version.
 # NVIDIA: the Container Toolkit injects the driver at run time (host driver >= 570).
 # AMD: the host's amdgpu driver, reached through /dev/kfd and /dev/dri.
 ARG PYTHON_IMAGE=python:3.12.14-slim-trixie
+ARG GPU=cuda
 
 # ---------------------------------------------------------------- builder
 FROM ${PYTHON_IMAGE} AS builder
-ARG GPU=cuda
+ARG GPU
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 RUN python -m venv /opt/venv
-COPY requirements.lock requirements-rocm.lock /tmp/
-# The CPU index no longer serves a 2.11 CPU wheel; pin its current Linux amd64 CPU wheel.
+COPY requirements.lock requirements-cpu.lock requirements-rocm.lock /tmp/
 RUN case "$GPU" in \
       cuda) lock=/tmp/requirements.lock ;; \
       rocm) lock=/tmp/requirements-rocm.lock ;; \
-      cpu) \
-        awk '/^[^[:space:]]/ { skip = $1 ~ /^(cuda-|nvidia-|torch|triton)/ } !skip { print }' \
-          /tmp/requirements.lock > /tmp/requirements-cpu.lock \
-        && lock=/tmp/requirements-cpu.lock ;; \
+      cpu) lock=/tmp/requirements-cpu.lock ;; \
       *) echo "GPU must be cuda, rocm, or cpu, got '$GPU'" >&2; exit 1 ;; \
     esac \
-    && /opt/venv/bin/pip install --require-hashes -r "$lock" \
-    && if [ "$GPU" = cpu ]; then \
-      printf '%s\n' \
-        'torch==2.15.0+cpu --hash=sha256:0955c7e3446326293f48af18fad67872fa31dee5a36a87690eb9e5be8b465be3' \
-        > /tmp/requirements-torch-cpu.lock \
-      && /opt/venv/bin/pip install --no-deps --require-hashes \
-        --index-url https://download.pytorch.org/whl/cpu \
-        -r /tmp/requirements-torch-cpu.lock; \
-    fi
+    && /opt/venv/bin/pip install --require-hashes -r "$lock"
 COPY requirements-onnxruntime-gpu.lock /tmp/requirements-onnxruntime-gpu.lock
 # CUDA: swap the CPU-only onnxruntime for the CUDA 12 build (CPU stays the default).
-# ROCm: Piper keeps the CPU build (no ROCm onnxruntime wheel), so PIPER_DEVICE=auto means CPU.
+# CPU/ROCm: Piper keeps the CPU build (no ROCm onnxruntime wheel).
 RUN if [ "$GPU" = cuda ]; then \
       /opt/venv/bin/pip uninstall -y onnxruntime \
       && /opt/venv/bin/pip install --no-deps --require-hashes -r /tmp/requirements-onnxruntime-gpu.lock; \
@@ -49,7 +38,13 @@ COPY src /build/src
 RUN /opt/venv/bin/pip install --no-deps --no-build-isolation /build
 
 # ---------------------------------------------------------------- runtime
-FROM ${PYTHON_IMAGE} AS runtime
+# Only the CPU image changes DEVICE's default; GPU images still fail fast without a GPU.
+FROM ${PYTHON_IMAGE} AS runtime-cuda
+FROM ${PYTHON_IMAGE} AS runtime-rocm
+FROM ${PYTHON_IMAGE} AS runtime-cpu
+ENV DEVICE=cpu
+
+FROM runtime-${GPU} AS runtime
 
 # Labels the Home Assistant Supervisor reads when the image runs as an add-on.
 ARG BUILD_VERSION=dev
