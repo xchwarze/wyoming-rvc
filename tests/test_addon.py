@@ -1,6 +1,12 @@
 import json
+from pathlib import Path
+
+import yaml
 
 from wyoming_rvc import addon
+from wyoming_rvc.config import Settings
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_apply_options_maps_to_env_and_keeps_explicit_env(tmp_path):
@@ -17,6 +23,17 @@ def test_apply_options_noop_outside_addon(tmp_path):
     env = {}
     assert addon.apply_options(env, tmp_path / "missing.json") is False
     assert env == {}
+
+
+def test_probe_text_option_reaches_runtime_settings(tmp_path):
+    config = yaml.safe_load((ROOT / "addon/config.yaml").read_text(encoding="utf-8"))
+    assert "probe_text" in config["options"] and "probe_text" in config["schema"]
+    options = {**config["options"], "probe_text": "Comprobación."}
+    path = tmp_path / "options.json"
+    path.write_text(json.dumps(options), encoding="utf-8")
+    env = {}
+    assert addon.apply_options(env, path) is True
+    assert Settings.from_env(env).probe_text == "Comprobación."
 
 
 class _Response:

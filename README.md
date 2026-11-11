@@ -443,6 +443,7 @@ per-voice Wyoming upstream. The default is a 12-word Spanish line from Jorge Lui
 [*La casa de Asterión*](https://ciudadseva.com/texto/la-casa-de-asterion/), in *El Aleph*.
 Set it to a short phrase in a language your upstream supports; for an English-only model,
 for example, `PROBE_TEXT=This is a voice test.`. An empty value uses the default.
+In the Home Assistant add-on, set the `probe_text` option for upstream sources in `voices.yaml`.
 This is separate from `WARMUP_TEXT`, which warms up the synthesis pipeline after loading
 the models; configure that phrase in your voice's language too.
 
@@ -563,8 +564,8 @@ other runs push to GHCR and test the pushed images.
 **Releases.** List the changes under `## Unreleased` in `addon/CHANGELOG.md`, then:
 
 ```bash
-python scripts/release.py 0.5.1 "short summary"   # sets the version in all four places, commits, tags
-git push --atomic origin main v0.5.1               # the tag builds the versioned images (CPU, NVIDIA, ROCm)
+python scripts/release.py 0.6.1 "CPU image and configurable upstream probe"   # sets all four versions, commits, tags
+git push --atomic origin main v0.6.1               # the tag builds the versioned images (CPU, NVIDIA, ROCm)
 ```
 
 Push both together: Home Assistant offers the add-on update as soon as `addon/config.yaml`
