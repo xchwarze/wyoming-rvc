@@ -375,7 +375,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `WYOMING_UPSTREAM` | – | `tcp://host:port` of the upstream TTS (required when `SOURCE=wyoming`) |
 | `UPSTREAM_VOICE` / `UPSTREAM_SPEAKER` | upstream default | Voice/speaker requested from the upstream |
 | `UPSTREAM_TIMEOUT_S` | `30` | Connect/read timeout for the upstream |
-| `PROBE_TEXT` | `Hello.` | Text synthesized at startup to validate an upstream Wyoming TTS and learn its sample rate |
+| `PROBE_TEXT` | `La casa es del tamaño del mundo; mejor dicho, es el mundo.` | Text synthesized when loading an upstream Wyoming TTS to validate it and learn its sample rate; use a language the upstream supports |
 | `PIPER_VOICE` | `en_US-ljspeech-high` | Any [Piper voice](https://huggingface.co/rhasspy/piper-voices), downloaded once to `/models/piper` |
 | `PIPER_MODEL` / `PIPER_CONFIG` | – | Explicit `.onnx` (and `.onnx.json`); overrides `PIPER_VOICE` |
 | `PIPER_DEVICE` | `auto` | `auto` (GPU when `DEVICE=cuda` and onnxruntime has CUDA; CPU in the ROCm image), `cuda`, `cpu` |
@@ -410,6 +410,14 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 | `WARMUP_TEXT` | `System ready.` | Synthesized and discarded at startup (use your voice's language) |
 | `MAX_TEXT_CHARS` | `5000` | Longest text per request: HTTP, Wyoming `synthesize`, and each sentence of a streamed response |
 | `LOG_LEVEL` / `LOG_FORMAT` | `INFO` / `text` | `LOG_FORMAT=json` gives structured logs |
+
+**Upstream probe.** `PROBE_TEXT` applies to the global `SOURCE=wyoming` source and every
+per-voice Wyoming upstream. The default is a 12-word Spanish line from Jorge Luis Borges,
+[*La casa de Asterión*](https://ciudadseva.com/texto/la-casa-de-asterion/), in *El Aleph*.
+Set it to a short phrase in a language your upstream supports; for an English-only model,
+for example, `PROBE_TEXT=This is a voice test.`. An empty value uses the default.
+This is separate from `WARMUP_TEXT`, which warms up the synthesis pipeline after loading
+the models; configure that phrase in your voice's language too.
 
 **Idle sleep.** Off by default. With `IDLE_SLEEP_S` above 0 (for example 300), a server with no request for that long unloads the RVC voices, ContentVec, RMVPE and the in-process Piper voices (the global one and those of `voices.yaml`), and reloads them when the next request arrives. That request is slower by the reload time (logged as `Models reloaded in … ms`). The service stays ready (`/readyz`) while asleep, and `/info` shows an `idle_sleep` block. It frees GPU memory; most of the process's system RAM (the CUDA runtime) stays. With `SOURCE=wyoming` and `RVC_ENABLED=false` there is nothing to unload.
 

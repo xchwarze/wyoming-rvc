@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `PROBE_TEXT` configures the phrase used to validate global and per-voice upstream
+  Wyoming TTS sources. The default is a short Spanish line from Borges; set a phrase
+  in a language your upstream supports. `WARMUP_TEXT` is unchanged.
+
 ## 0.6.0
 
 - Docker only: a second image, `ghcr.io/xchwarze/wyoming-rvc-rocm`, runs RVC on AMD GPUs

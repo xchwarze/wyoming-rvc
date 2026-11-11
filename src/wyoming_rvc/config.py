@@ -15,6 +15,9 @@ SOURCES: tuple[str, ...] = ("piper", "wyoming")
 PIPER_DEVICES: tuple[str, ...] = ("auto", "cuda", "cpu")
 DEVICES: tuple[str, ...] = ("cuda", "cpu", "auto")
 
+# Jorge Luis Borges, "La casa de Asterión" (El Aleph).
+DEFAULT_PROBE_TEXT = "La casa es del tamaño del mundo; mejor dicho, es el mundo."
+
 
 class ConfigError(ValueError):
     """Raised when the environment contains an invalid setting."""
@@ -80,7 +83,7 @@ class Settings:
     upstream_voice: str | None = None
     upstream_speaker: str | None = None
     upstream_timeout_s: float = 30.0
-    probe_text: str = "Hello."
+    probe_text: str = DEFAULT_PROBE_TEXT
     source_max_loaded: int = 4
 
     program_name: str = "Wyoming RVC"
@@ -147,7 +150,7 @@ class Settings:
             upstream_voice=r.opt_str("UPSTREAM_VOICE"),
             upstream_speaker=r.opt_str("UPSTREAM_SPEAKER"),
             upstream_timeout_s=r.float("UPSTREAM_TIMEOUT_S", 30.0, lo=1.0, hi=600.0),
-            probe_text=r.str("PROBE_TEXT", "Hello."),
+            probe_text=r.str("PROBE_TEXT", DEFAULT_PROBE_TEXT),
             source_max_loaded=r.int("SOURCE_MAX_LOADED", 4, lo=1, hi=32),
             program_name=r.str("WYOMING_PROGRAM_NAME", "Wyoming RVC"),
             voice_name=r.str("VOICE_NAME", "teto"),

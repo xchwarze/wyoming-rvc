@@ -19,6 +19,7 @@ from wyoming.info import Describe, Info
 from wyoming.tts import Synthesize, SynthesizeVoice
 
 from .audio import resample
+from .config import DEFAULT_PROBE_TEXT
 from .text import split_sentences
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class WyomingSource:
         voice: str | None = None,
         speaker: str | None = None,
         timeout: float = 30.0,
-        probe_text: str = "Hello.",
+        probe_text: str = DEFAULT_PROBE_TEXT,
     ) -> None:
         self.host, self.port = host, port
         self.voice = SynthesizeVoice(name=voice, speaker=speaker) if voice else None

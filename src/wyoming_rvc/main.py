@@ -241,7 +241,14 @@ class Service:
 
             host, port = s.upstream_address()
             _LOGGER.info("Connecting to upstream TTS %s:%d...", host, port)
-            source = WyomingSource(host, port, s.upstream_voice, s.upstream_speaker, s.upstream_timeout_s, s.probe_text)
+            source = WyomingSource(
+                host,
+                port,
+                s.upstream_voice,
+                s.upstream_speaker,
+                s.upstream_timeout_s,
+                probe_text=s.probe_text,
+            )
             source.load()
             self.source, self.source_name = source, f"{source.program} @ {host}:{port}"
             return
