@@ -1,0 +1,24 @@
+# CPU only: docker compose -f docker-compose.cpu.yml up -d
+# Same service as docker-compose.yml, without GPU libraries or device access.
+services:
+  wyoming-rvc:
+    build:
+      context: .
+      args:
+        GPU: cpu
+    image: ghcr.io/xchwarze/wyoming-rvc-cpu:latest
+    ports:
+      - "127.0.0.1:8080:8080"   # HTTP debug API: no auth, local only (use "8080:8080" to expose it)
+      - "10200:10200" # Wyoming (Home Assistant)
+    volumes:
+      - ./models:/models
+      - ./config:/config   # optional voices.yaml for several voices
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - DEVICE=cpu   # overrides DEVICE=cuda from .env.example; this image has no GPU runtime
+      - RVC_REPO_ID=${RVC_REPO_ID:-Slichi/KasaneTeto}
+      - PIPER_VOICE=${PIPER_VOICE:-en_US-ljspeech-high}
+    stop_grace_period: 30s
+    restart: unless-stopped
