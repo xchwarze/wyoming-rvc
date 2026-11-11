@@ -51,6 +51,8 @@ text ─► TTS source ─► RVC voice layer ─► PCM 16-bit ─► Wyoming �
 * **AMD instead:** a Radeon RX 6800/6900 (RDNA2), RX 7000 (RDNA3), RX 9000 (RDNA4) or a
   Ryzen AI 300 / Max APU, on Linux with the in-kernel `amdgpu` driver, and the separate ROCm
   image (about 15 GB). See [AMD GPUs (ROCm)](#amd-gpus-rocm).
+* **No GPU:** use the separate [CPU-only image](#cpu-only), without GPU drivers or the
+  Container Toolkit. RVC works on the CPU but runs at roughly real time or slower.
 
 ## Quick start
 
@@ -95,9 +97,34 @@ docker compose exec wyoming-rvc python scripts/test_tts.py "Hi, I am Teto." -o /
 docker compose exec wyoming-rvc python scripts/test_tts.py "Hi, I am Teto." -o /models/teto.wav --wyoming
 ```
 
+### CPU only
+
+`ghcr.io/xchwarze/wyoming-rvc-cpu` contains the CPU-only build of PyTorch, without CUDA or
+ROCm libraries. All three images use PyTorch 2.11.0 and the same shared dependency pins.
+Build it from the same Dockerfile with `--build-arg GPU=cpu`, or use compose:
+
+```bash
+docker compose -f docker-compose.cpu.yml pull     # or: docker compose -f docker-compose.cpu.yml build
+docker compose -f docker-compose.cpu.yml up -d
+docker compose -f docker-compose.cpu.yml logs -f
+```
+
+Without compose:
+
+```bash
+docker run -d --name wyoming-rvc --restart unless-stopped \
+  -p 127.0.0.1:8080:8080 -p 10200:10200 -v "$PWD/models:/models" \
+  ghcr.io/xchwarze/wyoming-rvc-cpu:latest
+```
+
+The image defaults to `DEVICE=cpu`, so both RVC and Piper run on the CPU. The CPU compose
+file also sets it explicitly, overriding `DEVICE=cuda` if you copied `.env.example`.
+The API, voices, model cache and Home Assistant connection work the same way. Conversion
+is noticeably slower than on a GPU. The Home Assistant add-on image is unchanged.
+
 ### AMD GPUs (ROCm)
 
-A second image, `ghcr.io/xchwarze/wyoming-rvc-rocm`, runs RVC on AMD GPUs through the ROCm
+A separate image, `ghcr.io/xchwarze/wyoming-rvc-rocm`, runs RVC on AMD GPUs through the ROCm
 build of PyTorch (Linux only; no extra host software besides the kernel's `amdgpu` driver).
 It is built from the same Dockerfile with `--build-arg GPU=rocm`:
 
@@ -370,7 +397,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DEVICE` | `cuda` | Device for RVC: `cuda` (refuses to start without a usable GPU; also the AMD GPU in the ROCm image), `cpu`, or `auto` (the GPU when available, otherwise CPU; the add-on default) |
+| `DEVICE` | `cuda` (`cpu` in the CPU image) | Device for RVC: `cuda` (refuses to start without a usable GPU; also the AMD GPU in the ROCm image), `cpu`, or `auto` (the GPU when available, otherwise CPU; the add-on default) |
 | `SOURCE` | `piper` | `piper` (in-process) or `wyoming` (upstream Wyoming TTS) |
 | `WYOMING_UPSTREAM` | – | `tcp://host:port` of the upstream TTS (required when `SOURCE=wyoming`) |
 | `UPSTREAM_VOICE` / `UPSTREAM_SPEAKER` | upstream default | Voice/speaker requested from the upstream |
@@ -524,16 +551,20 @@ WYOMING_RVC_HOST=127.0.0.1 WYOMING_RVC_PORT=10200 WYOMING_RVC_HA_OUT=./ha-out py
 ```
 
 `WYOMING_RVC_HA_OUT` keeps the audio that Home Assistant produced, so you can listen to it.
-The command to regenerate `requirements.lock` is in the header of `requirements.in`, and the
-one for the ROCm image's `requirements-rocm.lock` in `requirements-rocm.in`.
-CI (`.github/workflows/docker.yml`) runs the unit tests, builds both images (NVIDIA and AMD
-ROCm), pushes them to GHCR (not for pull requests), and smoke-tests the pushed images.
+The command to regenerate `requirements.lock` is in the header of `requirements.in`.
+The CPU and ROCm variants use `requirements-cpu.in` and `requirements-rocm.in` to override
+only the torch build; their headers explain how to retain the shared pins when regenerating
+the corresponding locks.
+CI (`.github/workflows/docker.yml`) runs the unit tests, builds all three images (CPU,
+NVIDIA and AMD ROCm), and smoke-tests their imports, dependency versions, ONNX providers
+and device defaults without downloading models. Pull requests test locally loaded images;
+other runs push to GHCR and test the pushed images.
 
 **Releases.** List the changes under `## Unreleased` in `addon/CHANGELOG.md`, then:
 
 ```bash
 python scripts/release.py 0.5.1 "short summary"   # sets the version in all four places, commits, tags
-git push --atomic origin main v0.5.1               # the tag builds the versioned images (NVIDIA, ROCm)
+git push --atomic origin main v0.5.1               # the tag builds the versioned images (CPU, NVIDIA, ROCm)
 ```
 
 Push both together: Home Assistant offers the add-on update as soon as `addon/config.yaml`
@@ -590,7 +621,8 @@ toward 0.5, and keep the pitch shift small.
 If joins sound uneven, try `SENTENCE_SILENCE_MS=80`, or `RVC_MODE=whole` (one pass with
 full context, at the cost of a later first audio).
 
-**CPU fallback.** `DEVICE=cpu` works for debugging, but RVC on the CPU runs at roughly
+**CPU only.** Use the [CPU image](#cpu-only) to avoid downloading GPU runtimes. The GPU
+images also accept `DEVICE=cpu`, but remain just as large. RVC on the CPU runs at roughly
 real time or slower.
 
 **Slow first start with Piper on the GPU.** onnxruntime-gpu 1.26 has no native kernels

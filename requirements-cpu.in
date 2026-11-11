@@ -1,0 +1,8 @@
+# CPU image: requirements.in with torch swapped for the CPU-only build.
+# Regenerate requirements-cpu.lock from a copy of requirements.lock, so every other pin matches
+# the CUDA image (uv keeps the versions it finds in the output file):
+#   cp requirements.lock requirements-cpu.lock
+#   uv pip compile requirements.in --overrides requirements-cpu.in -o requirements-cpu.lock \
+#     --python-version 3.12 --python-platform x86_64-manylinux_2_28 --index-strategy unsafe-best-match \
+#     --extra-index-url https://download.pytorch.org/whl/cpu --emit-index-url --generate-hashes
+torch==2.11.0+cpu

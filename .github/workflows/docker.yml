@@ -47,6 +47,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - gpu: cpu # CPU-only: ghcr.io/<owner>/wyoming-rvc-cpu
+            suffix: "-cpu"
           - gpu: cuda # NVIDIA: ghcr.io/<owner>/wyoming-rvc
             suffix: ""
           - gpu: rocm # AMD: ghcr.io/<owner>/wyoming-rvc-rocm
@@ -94,6 +96,7 @@ jobs:
           context: .
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -102,14 +105,45 @@ jobs:
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
           cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref={0}:buildcache,mode=max', env.IMAGE) || '' }}
 
-      # The smoke test pulls the pushed image; drop the local build state first so both fit on disk.
+      # Drop build state before smoke tests: PR images are loaded locally, other runs pull from GHCR.
       - name: Free build cache
-        if: github.event_name != 'pull_request'
         run: docker buildx prune --all --force
 
       - name: Smoke test image (CPU, no models)
-        if: github.event_name != 'pull_request'
+        env:
+          GPU: ${{ matrix.gpu }}
         run: |
           image="${IMAGE,,}:sha-${GITHUB_SHA::7}"
-          docker run --rm --entrypoint python "$image" -c "import wyoming_rvc.main, torch, piper, wyoming, faiss, transformers; print('imports ok', torch.__version__, torch.version.cuda or torch.version.hip)"
+          docker run --rm -i --entrypoint python -e GPU "$image" - <<'PY'
+          import os
+          from importlib.metadata import requires, version
+
+          import faiss
+          import onnxruntime
+          import piper
+          import torch
+          import transformers
+          import wyoming
+          from packaging.requirements import Requirement
+
+          import wyoming_rvc.main
+          from wyoming_rvc.config import Settings
+
+          gpu = os.environ["GPU"]
+          variants = {"cpu": "cpu", "cuda": "cu128", "rocm": "rocm7.2"}
+          assert torch.__version__.split("+", 1)[1] == variants[gpu], torch.__version__
+          assert (torch.version.cuda is not None) == (gpu == "cuda")
+          assert (torch.version.hip is not None) == (gpu == "rocm")
+          providers = onnxruntime.get_available_providers()
+          assert ("CUDAExecutionProvider" in providers) == (gpu == "cuda"), providers
+          assert Settings.from_env().device == ("cpu" if gpu == "cpu" else "cuda")
+          for dependency in requires("wyoming-rvc"):
+              requirement = Requirement(dependency)
+              if requirement.marker is None or requirement.marker.evaluate({"extra": ""}):
+                  assert version(requirement.name) in requirement.specifier, dependency
+          print("imports and image profile ok", torch.__version__, providers)
+          PY
+          if [ "$GPU" = cpu ]; then
+            docker run --rm --entrypoint python "$image" -m pip check
+          fi
           docker run --rm --entrypoint python -e DEVICE=tpu "$image" -m wyoming_rvc.main && exit 1 || test $? -eq 2
