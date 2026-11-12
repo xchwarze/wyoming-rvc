@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.1
 
 - Docker only: `ghcr.io/xchwarze/wyoming-rvc-cpu` runs without GPU libraries and defaults
   to `DEVICE=cpu`. All three images keep PyTorch 2.11.0. The Home Assistant add-on image
