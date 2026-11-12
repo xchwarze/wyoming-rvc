@@ -1,0 +1,65 @@
+---
+name: Wyoming RVC (AMD ROCm)
+version: "0.6.1"
+slug: wyoming_rvc_rocm
+description: RVC voice conversion on AMD GPUs (ROCm; compatible host required)
+url: https://github.com/xchwarze/wyoming-rvc/tree/main/addon-rocm
+arch:
+  - amd64
+stage: experimental
+init: false
+# DRM render nodes plus the separate AMD compute device; host drivers are required.
+video: true
+devices:
+  - /dev/kfd
+image: ghcr.io/xchwarze/wyoming-rvc-rocm
+map:
+  - addon_config:rw
+discovery:
+  - wyoming
+ports:
+  "10200/tcp": null
+ports_description:
+  "10200/tcp": Wyoming (only needed outside Home Assistant)
+# Each add-on has its own persistent cache, separate from the other profiles.
+backup_exclude:
+  - "*/huggingface"
+  - "*/rvc"
+  - "*/piper"
+  - "*/cuda-cache"
+options:
+  device: cuda
+  piper_voice: en_US-ljspeech-high
+  voice_language: ""
+  warmup_text: System ready.
+  probe_text: ""
+  rvc_repo_id: Slichi/KasaneTeto
+  rvc_model_file: ""
+  rvc_index_file: ""
+  rvc_pitch: 0
+  rvc_index_rate: 0.6
+  rvc_protect: 0.33
+  rvc_mode: sentence
+  voice_name: teto
+  default_voice: ""
+  rvc_max_loaded_models: 1
+  idle_sleep_s: 0
+  log_level: INFO
+schema:
+  device: list(auto|cuda|cpu)
+  piper_voice: str
+  voice_language: str?
+  warmup_text: str
+  probe_text: str?
+  rvc_repo_id: str
+  rvc_model_file: str?
+  rvc_index_file: str?
+  rvc_pitch: int(-24,24)
+  rvc_index_rate: float(0,1)
+  rvc_protect: float(0,0.5)
+  rvc_mode: list(sentence|whole)
+  voice_name: str
+  default_voice: str?
+  rvc_max_loaded_models: int(1,16)
+  idle_sleep_s: float(0,86400)
+  log_level: list(DEBUG|INFO|WARNING|ERROR)

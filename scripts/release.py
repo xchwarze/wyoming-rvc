@@ -3,12 +3,14 @@
 
   python scripts/release.py 0.5.1 "short summary for the tag"
 
-Nothing is pushed. Push the commit and the tag together, so the add-on's new version
-(Home Assistant reads it from main) and the image built from the tag appear at once:
+Nothing is pushed. Push the commit and the tag together: Home Assistant reads all
+three add-on manifests from main; their matching images are built from the tag:
 
   git push --atomic origin main v0.5.1
 
 Standard library only.
+
+Keep addon/CHANGELOG.md and its CPU/ROCm copies identical before releasing.
 """
 
 from __future__ import annotations
@@ -25,8 +27,11 @@ VERSION_LINES = [
     ("pyproject.toml", r'^version = "[^"]+"$', 'version = "{v}"'),
     ("src/wyoming_rvc/__init__.py", r'^__version__ = "[^"]+"$', '__version__ = "{v}"'),
     ("addon/config.yaml", r'^version: "[^"]+"$', 'version: "{v}"'),
+    ("addon-cpu/config.yaml", r'^version: "[^"]+"$', 'version: "{v}"'),
+    ("addon-rocm/config.yaml", r'^version: "[^"]+"$', 'version: "{v}"'),
 ]
 CHANGELOG = "addon/CHANGELOG.md"
+CHANGELOG_COPIES = ("addon-cpu/CHANGELOG.md", "addon-rocm/CHANGELOG.md")
 
 
 def git(*args: str) -> str:
@@ -53,7 +58,11 @@ def main() -> None:
     if git("tag", "--list", f"v{version}"):
         sys.exit(f"tag v{version} already exists")
     changelog = ROOT / CHANGELOG
-    unreleased = re.search(r"^## Unreleased\s*\n(.*?)(?=^## |\Z)", changelog.read_text(encoding="utf-8"), re.S | re.M)
+    current_notes = changelog.read_text(encoding="utf-8")
+    for name in CHANGELOG_COPIES:
+        if (ROOT / name).read_text(encoding="utf-8") != current_notes:
+            sys.exit(f"{name}: changelog differs from {CHANGELOG}; synchronize release notes before releasing")
+    unreleased = re.search(r"^## Unreleased\s*\n(.*?)(?=^## |\Z)", current_notes, re.S | re.M)
     if not unreleased or not unreleased.group(1).strip():
         sys.exit(f'{CHANGELOG} has no "## Unreleased" entries to release')
 
@@ -63,6 +72,7 @@ def main() -> None:
         for name, pattern, line in VERSION_LINES
     }
     edits[changelog] = replaced_once(changelog, r"^## Unreleased[ \t]*$", f"## {version}")
+    edits.update({ROOT / name: edits[changelog] for name in CHANGELOG_COPIES})
     for path, text in edits.items():
         path.write_text(text, encoding="utf-8", newline="")  # keep LF line endings on Windows too
 
