@@ -5,6 +5,10 @@
 - Docker only: `ghcr.io/xchwarze/wyoming-rvc-cpu` runs without GPU libraries and defaults
   to `DEVICE=cpu`. All three images keep PyTorch 2.11.0. The Home Assistant add-on image
   is unchanged.
+- `PROBE_TEXT` (`probe_text` in the add-on) configures the phrase used to validate
+  global and per-voice upstream Wyoming TTS sources. The default is a short Spanish
+  line from Borges; set a phrase in a language your upstream supports.
+  `WARMUP_TEXT` is unchanged.
 
 ## 0.6.0
 

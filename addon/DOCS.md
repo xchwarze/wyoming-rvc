@@ -35,6 +35,7 @@ a Piper voice in your assistant's language.
 | `piper_voice` | `en_US-ljspeech-high` | Any [Piper voice](https://huggingface.co/rhasspy/piper-voices) |
 | `voice_language` | from `piper_voice` | Language Home Assistant lists the voices under (`es_MX-claude-high` → `es`); set it only to override |
 | `warmup_text` | `System ready.` | Phrase synthesized at startup, in the voice's language |
+| `probe_text` | Borges line (Spanish) | Phrase used to validate upstream Wyoming TTS sources from `voices.yaml`; set it in a language those sources support. Empty uses the default |
 | `rvc_repo_id` | `Slichi/KasaneTeto` | Set to another Hugging Face RVC repo (`.pth`, `.index`, or a `.zip`) to serve that single voice instead of the built-in ones |
 | `rvc_model_file` / `rvc_index_file` | – | Pick a file when the repo contains several |
 | `rvc_pitch` | `0` | Pitch shift in semitones (−24…24) |

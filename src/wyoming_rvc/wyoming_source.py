@@ -19,11 +19,10 @@ from wyoming.info import Describe, Info
 from wyoming.tts import Synthesize, SynthesizeVoice
 
 from .audio import resample
+from .config import DEFAULT_PROBE_TEXT
 from .text import split_sentences
 
 _LOGGER = logging.getLogger(__name__)
-
-PROBE_TEXT = "Hello."
 
 
 class UpstreamError(RuntimeError):
@@ -34,11 +33,18 @@ class WyomingSource:
     """``sentences(text)`` yields float32 mono audio per sentence at ``sample_rate``."""
 
     def __init__(
-        self, host: str, port: int, voice: str | None = None, speaker: str | None = None, timeout: float = 30.0
+        self,
+        host: str,
+        port: int,
+        voice: str | None = None,
+        speaker: str | None = None,
+        timeout: float = 30.0,
+        probe_text: str = DEFAULT_PROBE_TEXT,
     ) -> None:
         self.host, self.port = host, port
         self.voice = SynthesizeVoice(name=voice, speaker=speaker) if voice else None
         self.timeout = timeout
+        self.probe_text = probe_text
         self.program: str | None = None
         self._rate = 0
 
@@ -66,7 +72,7 @@ class WyomingSource:
             voices = [v.name for p in programs for v in p.voices if v.installed]
             if self.voice and self.voice.name not in voices:
                 raise UpstreamError(f"UPSTREAM_VOICE={self.voice.name!r} not offered by upstream (voices: {voices})")
-            audio, rate = self._synthesize(stream, PROBE_TEXT)
+            audio, rate = self._synthesize(stream, self.probe_text)
         if audio.size == 0:
             raise UpstreamError("Upstream probe synthesis returned no audio")
         self._rate = rate

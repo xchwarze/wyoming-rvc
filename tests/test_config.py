@@ -12,6 +12,9 @@ def test_defaults():
     assert s.piper_voice == "en_US-ljspeech-high"
     assert s.piper_device == "auto" and s.piper_use_cuda is True  # auto follows DEVICE=cuda
     assert s.source == "piper"
+    assert s.probe_text == "La casa es del tamaño del mundo; mejor dicho, es el mundo."
+    assert Settings().probe_text == s.probe_text
+    assert 0 < len(s.probe_text.split()) < 40 and "\n" not in s.probe_text
     assert s.rvc_repo_id == "Slichi/KasaneTeto"
     assert (s.rvc_f0_method, s.rvc_pitch, s.rvc_index_rate, s.rvc_protect) == ("rmvpe", 0, 0.6, 0.33)
     assert s.rvc_mode == "sentence" and s.rvc_concurrency == 1
@@ -29,6 +32,7 @@ def test_overrides_and_empty_values():
             "RVC_MODEL_FILE": "",
             "PIPER_DEVICE": "cuda",
             "MODELS_DIR": "/data",
+            "PROBE_TEXT": "Comprobación.",
         }
     )
     assert s.device == "cpu"
@@ -37,6 +41,13 @@ def test_overrides_and_empty_values():
     assert s.rvc_model_file is None
     assert s.piper_use_cuda is True
     assert s.piper_data_dir == Path("/data/piper") and s.hf_home == Path("/data/huggingface")
+    assert s.probe_text == "Comprobación."
+
+
+@pytest.mark.parametrize("raw", ["", " \t\n"])
+def test_empty_probe_text_uses_the_default(raw):
+    settings = Settings.from_env({"PROBE_TEXT": raw})
+    assert settings.probe_text == Settings().probe_text
 
 
 @pytest.mark.parametrize(

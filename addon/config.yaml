@@ -27,6 +27,7 @@ options:
   piper_voice: en_US-ljspeech-high
   voice_language: ""
   warmup_text: System ready.
+  probe_text: ""
   rvc_repo_id: Slichi/KasaneTeto
   rvc_model_file: ""
   rvc_index_file: ""
@@ -44,6 +45,7 @@ schema:
   piper_voice: str
   voice_language: str?
   warmup_text: str
+  probe_text: str?
   rvc_repo_id: str
   rvc_model_file: str?
   rvc_index_file: str?

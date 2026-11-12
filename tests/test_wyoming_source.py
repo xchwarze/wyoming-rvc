@@ -10,7 +10,10 @@ import pytest
 from tests.conftest import FakePiper
 from wyoming_rvc.config import Settings
 from wyoming_rvc.http_server import ServiceState
+from wyoming_rvc.main import Service
 from wyoming_rvc.pipeline import SynthesisOptions, TtsPipeline
+from wyoming_rvc.sources import SourceRegistry
+from wyoming_rvc.voices import SourceSpec
 from wyoming_rvc.wyoming_server import WyomingService, build_info
 from wyoming_rvc.wyoming_source import UpstreamError, WyomingSource
 
@@ -22,13 +25,18 @@ def free_port() -> int:
 
 
 @pytest.fixture
-async def upstream():
+def upstream_piper():
+    return FakePiper()
+
+
+@pytest.fixture
+async def upstream(upstream_piper):
     """A Wyoming TTS at 22050 Hz (fake Piper, no RVC) playing the upstream role."""
     port = free_port()
     settings = Settings.from_env(
         {"WYOMING_HOST": "127.0.0.1", "WYOMING_PORT": str(port), "VOICE_NAME": "daniela", "RVC_ENABLED": "false"}
     )
-    pipeline = TtsPipeline(FakePiper(), None, SynthesisOptions(rvc=False))
+    pipeline = TtsPipeline(upstream_piper, None, SynthesisOptions(rvc=False))
     state = ServiceState(pipeline=pipeline, ready=True, stage="ready")
     info = build_info(settings, [SimpleNamespace(id="daniela", name="Fake Piper", language="es")])
     service = WyomingService(settings, state, lambda: info)
@@ -42,6 +50,40 @@ async def test_load_learns_program_and_rate(upstream):
     await asyncio.to_thread(source.load)
     assert source.sample_rate == 22050
     assert source.program == "Wyoming RVC"
+
+
+async def test_load_uses_default_probe_text(upstream, upstream_piper):
+    source = WyomingSource("127.0.0.1", upstream)
+    await asyncio.to_thread(source.load)
+    assert upstream_piper.calls == ["La casa es del tamaño del mundo; mejor dicho, es el mundo."]
+
+
+async def test_load_uses_configured_probe_text(upstream, upstream_piper):
+    source = WyomingSource("127.0.0.1", upstream, probe_text="Comprobación.")
+    await asyncio.to_thread(source.load)
+    assert upstream_piper.calls == ["Comprobación."]
+
+
+async def test_service_uses_configured_probe_text(upstream, upstream_piper):
+    settings = Settings.from_env(
+        {"SOURCE": "wyoming", "WYOMING_UPSTREAM": f"tcp://127.0.0.1:{upstream}", "PROBE_TEXT": "Comprobación."}
+    )
+    service = Service(settings)
+    await asyncio.to_thread(service.load_source)
+    assert service.source.sample_rate == 22050
+    assert upstream_piper.calls == ["Comprobación."]
+
+
+@pytest.mark.parametrize("own_upstream", [False, True])
+async def test_per_voice_upstream_uses_configured_probe_text(upstream, upstream_piper, own_upstream):
+    address = f"tcp://127.0.0.1:{upstream}"
+    settings = Settings.from_env({"WYOMING_UPSTREAM": address, "PROBE_TEXT": "Comprobación."})
+    registry = SourceRegistry(settings, object())
+    spec = SourceSpec(kind="wyoming", upstream=address if own_upstream else None)
+    await asyncio.to_thread(registry.prepare, spec)
+    source = await asyncio.to_thread(registry.get, spec)
+    assert source.sample_rate == 22050
+    assert upstream_piper.calls == ["Comprobación."]
 
 
 async def test_sentences_one_audio_per_sentence(upstream):
