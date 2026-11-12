@@ -120,7 +120,8 @@ docker run -d --name wyoming-rvc --restart unless-stopped \
 The image defaults to `DEVICE=cpu`, so both RVC and Piper run on the CPU. The CPU compose
 file also sets it explicitly, overriding `DEVICE=cuda` if you copied `.env.example`.
 The API, voices, model cache and Home Assistant connection work the same way. Conversion
-is noticeably slower than on a GPU. The Home Assistant add-on image is unchanged.
+is noticeably slower than on a GPU. The matching **Wyoming RVC (CPU)** add-on uses
+this image; the existing NVIDIA add-on keeps its original image.
 
 ### AMD GPUs (ROCm)
 
@@ -155,15 +156,45 @@ built-in **Wyoming Protocol** integration.
 
 1. **Settings → Apps → App Store → ⋮ → Repositories**, then add
    `https://github.com/xchwarze/wyoming-rvc`.
-2. Install **Wyoming RVC**, start it, and wait for the first start to download the
-   models (about 1 GB).
+2. Choose a profile below, start it, and wait for the first start to download the
+   models (about 1.3 GB).
 3. Home Assistant discovers it automatically: accept the new **Wyoming Protocol** entry
    under **Settings → Devices & Services**.
 
-The app is amd64 only. **Home Assistant OS does not give apps access to NVIDIA GPUs**, so
-there it runs on the CPU (`device: auto`), which works but is noticeably slower. AMD GPUs
-are out of reach too: the Home Assistant OS kernel has no ROCm compute driver (`/dev/kfd`).
-The app's Documentation tab lists its options.
+All three profiles are **amd64 only** and use PyTorch 2.11.0:
+
+| Store entry | Image | Default `device` | Intended host |
+|---|---|---|---|
+| [Wyoming RVC (CPU)](addon-cpu/DOCS.md) | `ghcr.io/xchwarze/wyoming-rvc-cpu` | `cpu` | Official HAOS; no GPU libraries or hardware access |
+| [Wyoming RVC (NVIDIA)](addon/DOCS.md) | `ghcr.io/xchwarze/wyoming-rvc` | `auto` | Existing installations; GPU only if the host exposes the NVIDIA runtime and driver |
+| [Wyoming RVC (AMD ROCm)](addon-rocm/DOCS.md) | `ghcr.io/xchwarze/wyoming-rvc-rocm` | `cuda` (HIP) | Experimental; compatible Linux host with AMD compute devices |
+
+**Official Home Assistant OS does not provide CUDA/ROCm compute access to apps.**
+Use the CPU profile there. A GPU image includes user-space libraries, not the missing
+host driver or passthrough support. [HAOS GPU access](https://github.com/home-assistant/architecture/discussions/1568)
+is currently a proposal. For GPU acceleration without a custom host environment, use
+Docker on a separate compatible machine as shown below.
+
+The NVIDIA entry preserves the existing `wyoming_rvc` slug, image, options and data;
+its display name changes, but existing users do not need to reinstall. `device: auto`
+still falls back to CPU. Changing `device` does not switch images or reduce their size.
+The AMD entry requests `/dev/kfd` plus DRM/video access; those devices and a supported
+driver must already exist on the host. Its default `cuda` setting fails without a
+usable AMD GPU.
+
+Each profile has separate options, a private `/data` model cache and its own public
+config folder: `/addon_configs/<id>_wyoming_rvc/`,
+`/addon_configs/<id>_wyoming_rvc_cpu/` or `/addon_configs/<id>_wyoming_rvc_rocm/`.
+When switching, back up and keep the old installation, copy custom options and
+`voices.yaml`/local files, adjust paths, and let the new profile download its models.
+Select the new Wyoming integration and test speech before removing the old one.
+See the [migration guide](addon/DOCS.md#profiles-data-and-migration).
+
+Wyoming's host port 10200 is disabled by default; Supervisor discovery needs no
+published port. If external clients need it, use a different host port per running
+profile and a trusted network: Wyoming has no authentication. The HTTP debug API
+is not published. Each app's Documentation tab covers setup; the
+[shared option reference](addon/DOCS.md#options) lists the voice settings.
 
 ### Option B: Docker on a GPU machine (lowest latency)
 
@@ -397,7 +428,7 @@ Copy `.env.example` to `.env`; compose reads it. Empty values mean "use the defa
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DEVICE` | `cuda` (`cpu` in the CPU image) | Device for RVC: `cuda` (refuses to start without a usable GPU; also the AMD GPU in the ROCm image), `cpu`, or `auto` (the GPU when available, otherwise CPU; the add-on default) |
+| `DEVICE` | `cuda` (`cpu` in the CPU image) | Device for RVC: `cuda` (refuses to start without a usable GPU; also the AMD GPU in the ROCm image), `cpu`, or `auto` (GPU when available, otherwise CPU). Add-on defaults: NVIDIA `auto`, CPU `cpu`, AMD `cuda` |
 | `SOURCE` | `piper` | `piper` (in-process) or `wyoming` (upstream Wyoming TTS) |
 | `WYOMING_UPSTREAM` | – | `tcp://host:port` of the upstream TTS (required when `SOURCE=wyoming`) |
 | `UPSTREAM_VOICE` / `UPSTREAM_SPEAKER` | upstream default | Voice/speaker requested from the upstream |
@@ -557,20 +588,26 @@ The CPU and ROCm variants use `requirements-cpu.in` and `requirements-rocm.in` t
 only the torch build; their headers explain how to retain the shared pins when regenerating
 the corresponding locks.
 CI (`.github/workflows/docker.yml`) runs the unit tests, builds all three images (CPU,
-NVIDIA and AMD ROCm), and smoke-tests their imports, dependency versions, ONNX providers
+NVIDIA and AMD ROCm), lints all three add-on folders, and smoke-tests their imports, dependency versions, ONNX providers
 and device defaults without downloading models. Pull requests test locally loaded images;
 other runs push to GHCR and test the pushed images.
 
-**Releases.** List the changes under `## Unreleased` in `addon/CHANGELOG.md`, then:
+**Releases.** List changes under `## Unreleased` in the canonical
+`addon/CHANGELOG.md` and keep both profile copies identical. For the next release:
 
 ```bash
-python scripts/release.py 0.6.1 "CPU image and configurable upstream probe"   # sets all four versions, commits, tags
-git push --atomic origin main v0.6.1               # the tag builds the versioned images (CPU, NVIDIA, ROCm)
+cp addon/CHANGELOG.md addon-cpu/CHANGELOG.md
+cp addon/CHANGELOG.md addon-rocm/CHANGELOG.md
+python scripts/release.py 0.6.2 "Separate CPU, NVIDIA and AMD add-ons"
+git push --atomic origin main v0.6.2   # the tag builds the versioned CPU, NVIDIA and ROCm images
 ```
 
-Push both together: Home Assistant offers the add-on update as soon as `addon/config.yaml`
-changes on `main`, and the image it pulls is the NVIDIA one built from the tag. A unit test fails
-if the four versions ever disagree.
+The helper updates package metadata, all three manifests and all three changelogs,
+then commits and tags. It refuses diverged changelog copies before changing any file.
+Run it on `main` with a clean working tree. Push the commit and tag together: Home
+Assistant reads the manifests from `main`, and each profile pulls its matching image
+with that version tag once the image build finishes. Tests enforce synchronized
+versions and identical release notes across profiles.
 
 ## Troubleshooting
 

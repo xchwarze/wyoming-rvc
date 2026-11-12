@@ -1,8 +1,8 @@
 ---
-name: Wyoming RVC
+name: Wyoming RVC (NVIDIA)
 version: "0.6.1"
 slug: wyoming_rvc
-description: Give any text-to-speech voice an RVC timbre (Piper + RVC over Wyoming)
+description: Give any text-to-speech voice an RVC timbre (NVIDIA CUDA image)
 url: https://github.com/xchwarze/wyoming-rvc
 arch:
   - amd64

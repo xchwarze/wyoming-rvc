@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Three Home Assistant store entries now match the CPU, NVIDIA and AMD ROCm images.
+  The existing add-on is named Wyoming RVC (NVIDIA) and keeps its slug, image,
+  options and data. CPU and AMD are separate installations with separate caches.
+- The CPU profile needs no GPU libraries or hardware access. AMD ROCm is experimental
+  and requires a compatible host with `/dev/kfd` and DRM devices; installing a GPU
+  profile does not enable CUDA/ROCm on official Home Assistant OS.
+- CI lints all three add-ons. Future releases synchronize every manifest and mirrored
+  changelog; the release helper refuses diverged release notes before changing files.
+
 ## 0.6.1
 
 - Docker only: `ghcr.io/xchwarze/wyoming-rvc-cpu` runs without GPU libraries and defaults

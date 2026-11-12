@@ -1,7 +1,7 @@
-# Wyoming RVC
+# Wyoming RVC (NVIDIA)
 
 Speaks with an [RVC](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion)
-voice: Piper synthesizes the text, then a resident RVC model changes its timbre
+voice: Piper synthesizes the text, then a resident RVC model changes its timbre.
 Everything stays loaded in memory. It comes with two voices, **Kasane Teto** (default) and
 **Hatsune Miku**: pick one per assistant in **Settings → Voice assistants → your assistant →
 Text-to-speech → Voice**. The voices are listed under the language of `piper_voice`, so pick
@@ -18,16 +18,54 @@ a Piper voice in your assistant's language.
 ## Hardware
 
 - **amd64 only.**
-- `device: auto` uses an NVIDIA GPU if the add-on can see one, otherwise the CPU.
-  **Home Assistant OS does not give add-ons access to NVIDIA GPUs**, so on HA OS the
-  add-on runs on the CPU. That works, but with noticeably higher latency than on a GPU.
-  AMD GPUs are not usable from the add-on either (the HA OS kernel has no ROCm driver).
+- This profile uses the NVIDIA CUDA image. `device: auto` uses an NVIDIA GPU if the
+  host exposes the required runtime, driver libraries and devices to the container;
+  otherwise it uses the CPU. `device: cuda` refuses to start without a usable GPU.
+- **Official Home Assistant OS does not provide CUDA/ROCm compute access to add-ons.**
+  Choose **Wyoming RVC (CPU)** there: it has the same voices without GPU libraries.
+  Installing a GPU profile does not install a host driver or enable GPU passthrough.
+  Proposed [HAOS GPU access](https://github.com/home-assistant/architecture/discussions/1568)
+  is not a released feature.
+- **Wyoming RVC (AMD ROCm)** is a separate, experimental profile for a compatible
+  Linux host with AMD compute support; it cannot use the NVIDIA image.
 - For the lowest latency (about 200 ms to first audio), run the Docker image on a machine
   with an NVIDIA GPU (or the ROCm image on a Linux machine with an AMD GPU) and add it to
   Home Assistant with **Wyoming Protocol → host:10200**.
   See the [project README](https://github.com/xchwarze/wyoming-rvc).
 
+## Profiles, data and migration
+
+The three store entries use different images, not a runtime image selector. Changing
+`device` never changes the image or its download size. The existing add-on is now
+named **Wyoming RVC (NVIDIA)**, with the same `wyoming_rvc` slug, image, options,
+`/data` model cache and `/addon_configs/<id>_wyoming_rvc/` configuration folder.
+
+CPU and AMD have separate slugs, configuration folders and private `/data` caches.
+To change profile:
+
+1. Back up the existing add-on and keep it installed while setting up the new one.
+2. Install the desired profile and copy the voice options you changed. Use the new
+   profile's documented `device` setting instead of copying a GPU setting to CPU.
+3. If present, copy `voices.yaml` and any local files it references to the new public
+   config folder. Adjust absolute paths; private `/data` downloads are not shared
+   and will download again. Paths outside the new add-on's mounts are not accessible.
+4. Start the new profile, accept its Wyoming integration and select its TTS engine
+   and voice in each assistant. Test speech before removing the old installation.
+
+Public config folders are `/addon_configs/<id>_wyoming_rvc_cpu/` for CPU and
+`/addon_configs/<id>_wyoming_rvc_rocm/` for AMD. `<id>` is the repository identifier
+assigned by Supervisor. Inside each container its own public folder is `/config`.
+
+Host port 10200 is disabled by default; Supervisor discovery does not need it. If
+you expose Wyoming for an external client, use different host ports when running
+profiles together. Wyoming has no authentication: expose it only on a trusted
+network. The HTTP debug API (8080) is not published by these add-ons.
+
 ## Options
+
+This is the shared option reference for all three profiles. Only `device` differs:
+NVIDIA defaults to `auto`, CPU to `cpu` (`auto` or `cpu` only), and AMD to `cuda`
+(PyTorch's device name for HIP). All other defaults below are shared.
 
 | Option | Default | Meaning |
 |---|---|---|

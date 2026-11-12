@@ -32,10 +32,18 @@ jobs:
           ruff format --check .
       - name: Unit tests
         run: pytest -q
-      - name: Lint Home Assistant app (add-on)
+      - name: Lint Home Assistant app (NVIDIA)
         uses: frenck/action-app-linter@v2
         with:
           path: "./addon"
+      - name: Lint Home Assistant app (CPU)
+        uses: frenck/action-app-linter@v2
+        with:
+          path: "./addon-cpu"
+      - name: Lint Home Assistant app (AMD ROCm)
+        uses: frenck/action-app-linter@v2
+        with:
+          path: "./addon-rocm"
 
   image:
     needs: test
